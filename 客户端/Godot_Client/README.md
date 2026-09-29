@@ -21,6 +21,8 @@ cd "E:\Game_Work\AI 游戏\多人躲猫猫\客户端\Godot_Client"
 
 `scripts/AutoPlay.gd` 会以游客身份连真服务器，建房补满 AI 打完整一局，把主界面、房间、投票、身份、追捕期（3/12/25/45 秒）、被抓、结算截图存到 `docs/screenshots/live-*.png`，然后退出。
 
+追加 `--autoplay-seek`（`-- --autoplay --autoplay-seek`）时，若身份是藏者会主动走向猎手出生点等待被抓，用于验证被抓 → 幽灵阵营选择（15 页停留 10 秒后回到局内）这段流程；日志里的 `AUTOPLAY caught +Ns page=` 逐秒记录当前页面。
+
 ## 键位与局内
 
 桌面端使用 UI 按钮；对接摇杆后 `WASD` 移动、`Shift` 跑、`Space` 主按钮、`Q` 技能、`1/2` 道具、`F` 指认。客户端发送 `game.input`（变化时，≥10Hz）和协议约定的 `game.action`。黑暗通过 `CanvasModulate` 色值 #0c0a1a 和本地视野 UI 表现；服务器快照负责权威位置/可见玩家/事件。

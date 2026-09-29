@@ -10,6 +10,13 @@ var wander: Vector2 = Vector2.RIGHT
 var next_turn_ms: int = 0
 var result_seen_ms: int = -1
 const HUNT_SHOTS: Array[int] = [3, 12, 25, 45]
+## `--autoplay-seek`: as a hider, walk to the hunter's spawn and wait there so the match
+## reaches the caught / ghost-choice screens (page 15).
+const HUNTER_SPAWN: Vector2 = Vector2(32, 20)
+var seek: bool = "--autoplay-seek" in OS.get_cmdline_user_args()
+var last_pos: Vector2 = Vector2.INF
+var stuck_until_ms: int = 0
+var next_check_ms: int = 0
 
 func _ready() -> void:
 	Config.autoplay = true
@@ -55,6 +62,9 @@ func _on_message(data: Dictionary) -> void:
 			if str(data.get("victimId", "")) == str(Session.user.get("id", "")):
 				await get_tree().create_timer(0.8).timeout
 				_shot("live-15-caught")
+				for i: int in 12:
+					await get_tree().create_timer(1.0).timeout
+					print("AUTOPLAY caught +%ds page=%d phase=%s" % [i + 2, Router.current, Session.phase])
 		"game.result":
 			result_seen_ms = Time.get_ticks_msec()
 			print("AUTOPLAY result received, page=", Router.current)
@@ -68,6 +78,17 @@ func _process(_delta: float) -> void:
 		next_turn_ms = now + 1500 + randi() % 1500
 		wander = Vector2.from_angle(randf() * TAU)
 	Config.autoplay_dir = wander
+	if seek and Session.role() != "hunter" and Session.snap.has("you") and now >= stuck_until_ms:
+		var pos: Vector2 = Vector2(float(Session.snap.you.x), float(Session.snap.you.y))
+		var to_spawn: Vector2 = HUNTER_SPAWN - pos
+		if now >= next_check_ms:
+			next_check_ms = now + 600
+			if last_pos.distance_to(pos) < 0.3 and to_spawn.length() > 2.0:
+				stuck_until_ms = now + 1200  # blocked by a wall: sidestep with the random wander
+				wander = Vector2.from_angle(randf() * TAU)
+			last_pos = pos
+		if now >= stuck_until_ms:
+			Config.autoplay_dir = to_spawn.normalized() if to_spawn.length() > 2.0 else Vector2.ZERO
 	if hunt_started_ms >= 0:
 		var secs: int = (now - hunt_started_ms) / 1000
 		for s: int in HUNT_SHOTS:
