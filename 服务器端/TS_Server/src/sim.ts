@@ -3,9 +3,9 @@ import {createGame,rewardsFor,tickGame} from './game/engine.js';
 import {CONFIG} from './game/config.js';
 import type {Color} from './types.js';
 export function seeded(seed:number){return ()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296}}
-export function simulate(seed=42,log:(s:string)=>void=()=>{}){
+export function simulate(seed=42,log:(s:string)=>void=()=>{},mapId='old_dorm'){
  const players=Array.from({length:8},(_,i)=>({id:'bot_'+i,nickname:'AI-'+(i+1),color:'green' as Color,isBot:true}));
- const g=createGame('SIM',players,600,'auto',false,{now:1000000,random:seeded(seed)});log('phase assign');let lastPhase='assign';
+ const g=createGame('SIM',players,600,'auto',false,{now:1000000,random:seeded(seed),mapId});log('phase assign');let lastPhase='assign';
  for(let i=0;i<CONFIG.tickHz*(g.durationSec+CONFIG.assignSec+CONFIG.hideSec+CONFIG.resultSec+2);i++){
  tickGame(g);
  for(const m of g.outbox.splice(0)){

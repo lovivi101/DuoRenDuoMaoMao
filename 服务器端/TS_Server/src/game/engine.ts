@@ -1,7 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import type {GamePlayer,GameState,Player,Role} from '../types.js';
 import {CONFIG,RULES} from './config.js';
-import {createOldDorm,zoneAt} from './maps/old_dorm.js';
+import {zoneAt} from './maps/old_dorm.js';
+import {createMap} from './maps/index.js';
+import {tickMechanics,mechanicsSpeed,onInteract} from './mechanics.js';
 import {distance,hasLineOfSight,validMove,visible,visionRadius} from './vision.js';
 import {catchPlayer,repairSeconds,slap} from './combat.js';
 import {pickup,randomItem,tickItems,useItem} from './items.js';
@@ -18,15 +20,15 @@ export function rolesFor(ids:string[],lastHunters:string[]=[],hunterCount:'auto'
  if(moleEnabled&&ids.length>=10){const i=shuffled.find(i=>roles[i]==='hider');if(i!==undefined)roles[i]='mole'}
  return roles;
 }
-export function createGame(roomCode:string,players:Pick<Player,'id'|'nickname'|'color'|'isBot'>[],durationSec=300,hunterCount:'auto'|1|2='auto',moleEnabled=true,options:{now?:number;random?:()=>number;lastHunters?:string[]}={}):GameState{
+export function createGame(roomCode:string,players:Pick<Player,'id'|'nickname'|'color'|'isBot'>[],durationSec=300,hunterCount:'auto'|1|2='auto',moleEnabled=true,options:{now?:number;random?:()=>number;lastHunters?:string[];mapId?:string}={}):GameState{
  durationSec=CONFIG.huntSec??durationSec;
- const now=options.now??Date.now(),random=options.random??Math.random,map=createOldDorm(),roles=rolesFor(players.map(p=>p.id),options.lastHunters??[],hunterCount,moleEnabled,random);let hi=0;
+ const now=options.now??Date.now(),random=options.random??Math.random,map=createMap(options.mapId??'old_dorm'),roles=rolesFor(players.map(p=>p.id),options.lastHunters??[],hunterCount,moleEnabled,random);let hi=0;
  const ps:GamePlayer[]=players.map((p,i)=>{
  const spawn=roles[i]==='hunter'?map.hunterSpawn:map.hiderSpawns[hi++%map.hiderSpawns.length];
  return {...p,ready:true,isHost:false,online:true,role:roles[i],...spawn,dir:0,state:'normal',stamina:RULES.staminaMax,items:[null,null],prop:null,caged:false,caught:false,rescued:false,ghostSide:null,chooseUntil:0,ghostReadyAt:0,reportReadyAt:0,input:{seq:-1,mx:0,my:0,run:false,at:now},running:false,flashlight:true,stunnedUntil:0,transitionUntil:0,lastRunRipple:-Infinity,lastJitter:now,lastSlap:-Infinity,disconnectedAt:null,expired:false,interact:null,slowUntil:0,boostUntil:0,revealedUntil:0,lastItemAt:0,score:{},survival:0,captures:0,accused:false,eliminated:false};
  });
  const huntAt=now+(CONFIG.assignSec+CONFIG.hideSec)*1000;
- const g:GameState={id:randomUUID(),roomCode,mapId:map.id,map,phase:'assign',now,phaseEndsAt:now+CONFIG.assignSec*1000,startedAt:now,huntStartedAt:huntAt,durationSec,tick:0,players:ps,generators:map.generators.map(p=>({...p,progress:0,fixed:false,participants:new Set(),lastRipple:0})),ripples:[],footprints:[],marks:[],drops:[],eventCounts:{},nextEventAt:huntAt+RULES.eventInterval*1000,nextDropAt:huntAt+RULES.dropInterval*1000,event:null,walls:new Map(),hazards:[],outbox:[],voided:false,random};
+ const g:GameState={id:randomUUID(),roomCode,mapId:map.id,map,phase:'assign',now,phaseEndsAt:now+CONFIG.assignSec*1000,startedAt:now,huntStartedAt:huntAt,durationSec,tick:0,players:ps,generators:map.generators.map(p=>({...p,progress:0,fixed:false,participants:new Set(),lastRipple:0})),ripples:[],footprints:[],marks:[],drops:[],eventCounts:{},nextEventAt:huntAt+RULES.eventInterval*1000,nextDropAt:huntAt+RULES.dropInterval*1000,event:null,walls:new Map(),hazards:[],outbox:[],voided:false,random,mapEvent:null,nextMapEventAt:huntAt,broadcastUsed:false};
  g.drops=[0,2,3,4,6,9].map((idx,i)=>({...map.itemSpots[idx],id:'initial_'+i,item:randomItem(g,true),stage:'landed',at:now}));
  return g;
 }
@@ -67,6 +69,7 @@ export function action(g:GameState,id:string,kind:string,data:Record<string,unkn
  const door=g.map.lockedDoors.find(q=>distance(p,{x:q.x+.5,y:q.y+.5})<1.8);
  if(door){g.map.lockedDoors=g.map.lockedDoors.filter(q=>q!==door);emit(g,{t:'game.wall',cells:[{...door,tile:3,locked:false}]});ripple(g,door,'door');return}
  if(p.role==='hunter')return;
+ if(onInteract(g,p))return;
  const victim=g.players.find(q=>q.caged&&!q.rescued&&!q.eliminated&&(data.targetId===undefined||q.id===data.targetId));
  if(victim&&distance(p,g.map.cage)<=RULES.interactRange){p.interact={kind:'rescue',target:victim.id,value:0};return}
  if(active(g)){const gen=g.generators.filter(q=>!q.fixed&&distance(p,q)<=RULES.interactRange&&hasLineOfSight(p.x,p.y,q.x,q.y,g.map)).sort((a,b)=>distance(p,a)-distance(p,b))[0];if(gen)p.interact={kind:'repair',target:String(gen.id),value:gen.progress}}return;
@@ -85,7 +88,7 @@ function move(g:GameState,p:GamePlayer,dt:number){
  const hunter=p.role==='hunter',ghost=p.state==='ghost',free=hunter||ghost||p.boostUntil>g.now||(g.event?.stage==='start'&&g.event.kind==='adrenaline');
  const running=run&&(free||p.stamina>0);p.running=running&&Math.hypot(mx,my)>0;
  let speed=hunter?(running?RULES.hunterRun:RULES.hunterWalk):(running?RULES.hiderRun:RULES.hiderWalk);
- if(g.phase==='final'&&hunter)speed*=1.2;if(p.boostUntil>g.now)speed*=hunter?RULES.hunterBoost:RULES.hiderBoost;if(p.slowUntil>g.now)speed*=1-RULES.netSlow;
+ if(g.phase==='final'&&hunter)speed*=1.2;speed*=mechanicsSpeed(g,p);if(p.boostUntil>g.now)speed*=hunter?RULES.hunterBoost:RULES.hiderBoost;if(p.slowUntil>g.now)speed*=1-RULES.netSlow;
  if(g.event?.stage==='start'&&g.event.kind==='adrenaline')speed*=1.5;
  if(!hunter&&!ghost)p.stamina=Math.max(0,Math.min(RULES.staminaMax,p.stamina+(p.running&&!free?-1:RULES.staminaRegen)*dt));
  const old={x:p.x,y:p.y},nx=p.x+mx*speed*dt,ny=p.y+my*speed*dt;
@@ -157,6 +160,7 @@ export function tickGame(g:GameState,now=g.now+1000/CONFIG.tickHz){
  move(g,p,dt);if(living(p)&&p.role==='hider'&&active(g))p.survival+=dt;
  if(p.state==='disguised'&&now-p.lastJitter>=RULES.jitterSec*1000){fx(g,p,'disguise_jitter',p.id);p.lastJitter=now}
  }
+ tickMechanics(g,dt);
  if(active(g)){
  interact(g,dt);tickItems(g);tickEvents(g);
  if(g.phase==='hunt'&&g.phaseEndsAt-now<=RULES.finalSec*1000)changePhase(g,'final',g.phaseEndsAt);
@@ -169,12 +173,13 @@ export function tickGame(g:GameState,now=g.now+1000/CONFIG.tickHz){
 export function snapshotFor(g:GameState,id:string){
  const p=g.players.find(p=>p.id===id);if(!p)return null;
  const marks=g.marks.filter(m=>m.kind!=='report_assist'&&(m.audience==='all'||m.audience==='hunter'&&(p.role==='hunter'||p.role==='mole'||p.ghostSide==='wraith')||m.audience==='hider'&&p.role!=='hunter'));
- const isMarked=(q:GamePlayer)=>marks.some(m=>m.targetId===q.id&&(m.kind==='report'||m.kind==='wraith'));
+ const isMarked=(q:GamePlayer)=>marks.some(m=>m.targetId===q.id&&(m.kind==='report'||m.kind==='wraith'||m.kind==='xray'));
  const players=g.players.filter(q=>q.id!==id&&!(q.state==='ghost'&&p.role==='hunter')&&(visible(g,p,q)||isMarked(q)));
  return {t:'game.snap',tick:g.tick,now:g.now,timeLeftSec:Math.max(0,(g.phaseEndsAt-g.now)/1000),
+ mapEvent:g.mapEvent?{kind:g.mapEvent.kind,stage:g.mapEvent.stage,at:g.mapEvent.at,until:g.mapEvent.until,dir:g.mapEvent.dir??0}:null,nextMapEventAt:g.map.mechanics?.tilt||g.map.mechanics?.blizzard?g.nextMapEventAt:0,
  roster:g.players.filter(q=>q.role!=='hunter').map(q=>({color:q.color,caught:!living(q)})),nextEventAt:g.nextEventAt,
  alive:g.players.filter(q=>q.role==='hider'&&living(q)).length,totalHiders:g.players.filter(q=>q.role==='hider').length,caughtByMe:p.captures,
- you:{x:p.x,y:p.y,dir:p.dir,state:p.state,stamina:p.stamina,items:p.items,prop:p.prop,flashlight:p.flashlight,visionRadius:visionRadius(g,p),ghostSide:p.ghostSide,caged:p.caged,rescued:p.rescued,ghostChoiceEndsAt:p.chooseUntil,ackSeq:p.input.seq,cooldowns:{ghostSkill:Math.max(0,(p.ghostReadyAt-g.now)/1000),report:Math.max(0,(p.reportReadyAt-g.now)/1000)},progress:p.interact?{kind:p.interact.kind,value:p.interact.value}:null},
+ you:{x:p.x,y:p.y,dir:p.dir,state:p.state,stamina:p.stamina,items:p.items,prop:p.prop,flashlight:p.flashlight,visionRadius:visionRadius(g,p),ghostSide:p.ghostSide,caged:p.caged,rescued:p.rescued,ghostChoiceEndsAt:p.chooseUntil,cold:+(1-mechanicsSpeed(g,p)).toFixed(2),ackSeq:p.input.seq,cooldowns:{ghostSkill:Math.max(0,(p.ghostReadyAt-g.now)/1000),report:Math.max(0,(p.reportReadyAt-g.now)/1000)},progress:p.interact?{kind:p.interact.kind,value:p.interact.value}:null},
  players:players.map(q=>({id:q.id,x:q.x,y:q.y,dir:q.dir,state:q.state,prop:q.state==='disguised'?q.prop:null,running:q.running})),
  ripples:g.ripples.map(({x,y,r,kind,hunter})=>({x,y,r,kind,hunter})),
  footprints:g.footprints.filter(f=>visible(g,p,f)).map(({x,y,dir})=>({x,y,dir})),

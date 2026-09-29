@@ -8,6 +8,8 @@ export function astar(start:Pos,goal:Pos,map:GameMap=oldDorm):Pos[]{
  const index=(p:Pos)=>Math.floor(p.y)*map.w+Math.floor(p.x),s=index(start),end=index(goal);
  if(blockedTile(goal.x,goal.y,map)||blockedTile(start.x,start.y,map))return [];
  const open=[s],parent=new Map<number,number>(),cost=new Map([[s,0]]),closed=new Set<number>();
+ // Transit cells (elevator, escalator, hatch) are extra edges costing their wait time.
+ const portals=new Map((map.portals??[]).map(q=>[q.y*map.w+q.x,q]));
  const h=(n:number)=>Math.abs(n%map.w-Math.floor(goal.x))+Math.abs(Math.floor(n/map.w)-Math.floor(goal.y));
  while(open.length){
  let best=0;for(let i=1;i<open.length;i++)if(cost.get(open[i])!+h(open[i])<cost.get(open[best])!+h(open[best]))best=i;
@@ -16,10 +18,12 @@ export function astar(start:Pos,goal:Pos,map:GameMap=oldDorm):Pos[]{
  return path.map(k=>({x:k%map.w+.5,y:Math.floor(k/map.w)+.5}));
  }
  closed.add(current);const x=current%map.w,y=Math.floor(current/map.w);
- for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
- const nx=x+dx,ny=y+dy;if(blockedTile(nx,ny,map))continue;
+ const portal=portals.get(current);
+ const steps:[number,number][]=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]];if(portal)steps.push([portal.to.x,portal.to.y]);
+ for(const [nx,ny] of steps){
+ if(blockedTile(nx,ny,map))continue;
  const next=ny*map.w+nx;if(closed.has(next))continue;
- const nc=cost.get(current)!+1;
+ const nc=cost.get(current)!+(portal&&Math.abs(nx-x)+Math.abs(ny-y)>1?1+portal.delaySec*4:1);
  if(nc<(cost.get(next)??Infinity)){cost.set(next,nc);parent.set(next,current);if(!open.includes(next))open.push(next)}
  }
  }return [];
@@ -132,6 +136,8 @@ export function tickBots(g:GameState){
  // Advance waypoints only close to their centers so corner collision never wedges a bot.
  while(ai.path.length&&distance(p,ai.path[0])<.12)ai.path.shift();
  const next=ai.path[0];
+ // A far waypoint right after a transit cell: stand still on it until the ride happens.
+ if(next&&distance(p,next)>1.6&&(g.map.portals??[]).some(q=>q.x===Math.floor(p.x)&&q.y===Math.floor(p.y))){applyInput(g,p.id,0,0,false);continue}
  if(next){const dx=next.x-p.x,dy=next.y-p.y,d=Math.hypot(dx,dy);
  const nearbyHunter=g.players.some(q=>q.role==='hunter'&&visible(g,p,q)&&distance(p,q)<5);
  const run=ai.mode==='flee'&&(nearbyHunter||p.stamina>2)||ai.mode==='chase'||p.role==='hunter'&&ai.patrolRun;

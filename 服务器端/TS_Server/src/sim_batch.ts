@@ -6,11 +6,11 @@ function arg(name:string,fallback:number){
  if(!Number.isSafeInteger(value)||value<1)throw Error(`${name} requires a positive integer`);
  return value;
 }
-const n=arg('--n',30),start=arg('--seed',1);
+const n=arg('--n',30),start=arg('--seed',1),mapAt=process.argv.indexOf('--map'),mapId=mapAt<0?'old_dorm':process.argv[mapAt+1];
 let wins=0,caught=0,fixedGames=0,fixedTotal=0,duration=0;
-console.log(`Batch: n=${n}, seeds=${start}..${start+n-1}, players=8 (1 hunter / 7 hiders), hunt=${CONFIG.huntSec??600}s`);
+console.log(`Batch: map=${mapId}, n=${n}, seeds=${start}..${start+n-1}, players=8 (1 hunter / 7 hiders), hunt=${CONFIG.huntSec??600}s`);
 for(let i=0;i<n;i++){
- const g=simulate(start+i),hiders=g.players.filter(p=>p.role==='hider');
+ const g=simulate(start+i,()=>{},mapId),hiders=g.players.filter(p=>p.role==='hider');
  const captures=hiders.filter(p=>p.caught).length,fixed=g.generators.filter(p=>p.fixed).length;
  // Result deadline minus result screen gives the actual end of play.
  const seconds=(g.phaseEndsAt-CONFIG.resultSec*1000-g.startedAt)/1000;

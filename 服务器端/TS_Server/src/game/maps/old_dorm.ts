@@ -54,7 +54,7 @@ export function createOldDorm():GameMap {
  put(14,21,'puddle');put(19,15,'puddle');put(3,22,'bath_mat');put(11,24,'bath_mat');put(22,15,'mop_bucket');
  put(61,20,'mop_bucket');put(28,24,'papers');
  put(3,32,'mop_bucket');put(26,31,'papers');put(40,37,'puddle');put(58,28,'laundry_basket');
- const map:GameMap={id:'old_dorm',w:W,h:H,tileSize:32,tiles,
+ const map:GameMap={id:'old_dorm',theme:'old_dorm',w:W,h:H,tileSize:32,tiles,
  zones:[{name:'中央大厅',x:26,y:14,w:12,h:12,floor:'tile'},
  {name:'北区宿舍走廊',x:1,y:1,w:62,h:12,floor:'wood'},
  {name:'东区食堂',x:39,y:14,w:24,h:12,floor:'tile'},
@@ -69,14 +69,18 @@ export function createOldDorm():GameMap {
 }
 export const oldDorm=createOldDorm();
 export function tileAt(x:number,y:number,map:GameMap=oldDorm){const xx=Math.floor(x),yy=Math.floor(y);return xx<0||yy<0||xx>=map.w||yy>=map.h?1:map.tiles[yy*map.w+xx]}
-export function sightBlockedTile(x:number,y:number,map:GameMap=oldDorm){const t=tileAt(x,y,map);return t===1||t===2||t===5||t===7||map.lockedDoors.some(p=>p.x===Math.floor(x)&&p.y===Math.floor(y))}
-export function blockedTile(x:number,y:number,map:GameMap=oldDorm){return tileAt(x,y,map)===6||sightBlockedTile(x,y,map)}
+// Tile rules: 8 curtain is walkable but hides what is behind it (fitting rooms);
+// 9 atrium is a railed drop that blocks movement but not sight (mall).
+const SIGHT_BLOCKING=new Set([1,2,5,7,8]),MOVE_BLOCKING=new Set([1,2,5,6,7,9]);
+const locked=(x:number,y:number,map:GameMap)=>map.lockedDoors.some(p=>p.x===Math.floor(x)&&p.y===Math.floor(y));
+export function sightBlockedTile(x:number,y:number,map:GameMap=oldDorm){return SIGHT_BLOCKING.has(tileAt(x,y,map))||locked(x,y,map)}
+export function blockedTile(x:number,y:number,map:GameMap=oldDorm){return MOVE_BLOCKING.has(tileAt(x,y,map))||locked(x,y,map)}
 export function isBlocked(x:number,y:number,r=RULES.radius,map:GameMap=oldDorm){
  for(let yy=Math.floor(y-r);yy<=Math.floor(y+r);yy++)for(let xx=Math.floor(x-r);xx<=Math.floor(x+r);xx++){
  if(blockedTile(xx,yy,map)){const nx=Math.max(xx,Math.min(x,xx+1)),ny=Math.max(yy,Math.min(y,yy+1));if((nx-x)**2+(ny-y)**2<r*r-1e-8)return true}
  }return false;
 }
-export function wireMap(map:GameMap){return {...map,tiles:Buffer.from(map.tiles).toString('base64'),legend:{0:'floor',1:'wall_solid',2:'wall_cracked',3:'door',4:'rubble',5:'void',6:'furniture',7:'shelf'}}}
+export function wireMap(map:GameMap){return {...map,tiles:Buffer.from(map.tiles).toString('base64'),legend:{0:'floor',1:'wall_solid',2:'wall_cracked',3:'door',4:'rubble',5:'void',6:'furniture',7:'shelf',8:'curtain',9:'atrium'}}}
 export function zoneAt(p:Pos,map:GameMap){return map.zones.find(z=>p.x>=z.x&&p.y>=z.y&&p.x<z.x+z.w&&p.y<z.y+z.h)}
-export function ascii(map=oldDorm){const chars=['.','#','%','+',';', ' ','f','s'];const rows=Array.from({length:map.h},(_,y)=>Array.from({length:map.w},(_,x)=>chars[tileAt(x,y,map)]));for(const p of map.props)rows[Math.floor(p.y)][Math.floor(p.x)]='p';for(const p of map.itemSpots)rows[Math.floor(p.y)][Math.floor(p.x)]='i';for(const p of map.generators)rows[Math.floor(p.y)][Math.floor(p.x)]='G';rows[17][32]='C';rows[20][32]='H';console.log(rows.map(r=>r.join('')).join('\n'));console.log('# solid | % cracked | + door | f furniture | s shelf | G generator | i item | p prop | C cage | H hunter');console.log(map.zones.map(z=>z.name+': '+z.x+','+z.y+' '+z.w+'x'+z.h).join('\n'))}
-if(process.argv.includes('--ascii'))ascii();
+export function ascii(map=oldDorm){const chars=['.','#','%','+',';', ' ','f','s','c','a'];const rows=Array.from({length:map.h},(_,y)=>Array.from({length:map.w},(_,x)=>chars[tileAt(x,y,map)]));for(const p of map.props)rows[Math.floor(p.y)][Math.floor(p.x)]='p';for(const p of map.itemSpots)rows[Math.floor(p.y)][Math.floor(p.x)]='i';for(const p of map.generators)rows[Math.floor(p.y)][Math.floor(p.x)]='G';rows[17][32]='C';rows[20][32]='H';console.log(rows.map(r=>r.join('')).join('\n'));console.log('# solid | % cracked | + door | f furniture | s shelf | G generator | i item | p prop | C cage | H hunter');console.log(map.zones.map(z=>z.name+': '+z.x+','+z.y+' '+z.w+'x'+z.h).join('\n'))}
+if(process.argv.includes('--ascii')&&!process.argv.some(a=>a.includes('index')))ascii();

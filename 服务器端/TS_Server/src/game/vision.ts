@@ -1,6 +1,7 @@
 import type {GameMap,GamePlayer,GameState,Pos} from '../types.js';
 import {sightBlockedTile,isBlocked,oldDorm} from './maps/old_dorm.js';
 import {RULES} from './config.js';
+import {litByFire,mechanicsVision} from './mechanics.js';
 export const distance=(a:Pos,b:Pos)=>Math.hypot(a.x-b.x,a.y-b.y);
 // Supercover grid DDA, including both cells when crossing an exact grid corner.
 export function hasLineOfSight(ax:number,ay:number,bx:number,by:number,map=oldDorm){
@@ -17,7 +18,8 @@ export function inLight(ax:number,ay:number,bx:number,by:number,dir:number,radiu
  const d=Math.hypot(bx-ax,by-ay),a=Math.atan2(by-ay,bx-ax)-dir;
  return d<=radius&&Math.abs(Math.atan2(Math.sin(a),Math.cos(a)))<=angle/2&&hasLineOfSight(ax,ay,bx,by,map);
 }
-export function visionRadius(g:GameState,p:GamePlayer){
+export function visionRadius(g:GameState,p:GamePlayer){return mechanicsVision(g,p,baseVision(g,p))}
+function baseVision(g:GameState,p:GamePlayer){
  if(g.phase==='assign'||(g.phase==='hide'&&p.role==='hunter'))return 0;
  if(p.role==='hunter'&&g.hazards.some(h=>h.kind==='smoke'&&h.until>g.now&&distance(h,p)<=RULES.smokeRadius))return 0;
  if(g.event?.stage==='start'&&g.event.kind==='blackout')return 1;
@@ -31,6 +33,6 @@ export function visible(g:GameState,observer:GamePlayer,target:Pos&{state?:strin
  // Emergency lighting is an explicit global-reveal event in the design.
  if(g.event?.stage==='start'&&g.event.kind==='emergency_light')return true;
  if(!hasLineOfSight(observer.x,observer.y,target.x,target.y,g.map))return false;
- return distance(observer,target)<=r||(observer.role==='hunter'&&observer.flashlight&&inLight(observer.x,observer.y,target.x,target.y,observer.dir,RULES.flashlightRange,RULES.flashlightAngle,g.map));
+ return distance(observer,target)<=r||litByFire(g,observer,target)||(observer.role==='hunter'&&observer.flashlight&&inLight(observer.x,observer.y,target.x,target.y,observer.dir,RULES.flashlightRange,RULES.flashlightAngle,g.map));
 }
 export function validMove(x:number,y:number,map:GameMap=oldDorm){return !isBlocked(x,y,RULES.radius,map)}
