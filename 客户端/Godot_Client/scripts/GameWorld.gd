@@ -398,8 +398,9 @@ func _draw_signals() -> void:
 		var radius: float = float(ripple.get("r",3))*32
 		var amount: float = fmod(now + float(ripple.x)*.13,1.4)/1.4
 		var color: Color = Color("f95668") if ripple.get("hunter",false) else Color("e8e4ff")
-		color.a = .8*(1-amount)
-		signals_layer.draw_arc(_xy(ripple)*32,maxf(2,radius*amount),0,TAU,48,color,3 if Config.settings.visual_audio else 1.5)
+		# Thin rings that fade as they grow: big noises must not smear across the whole screen.
+		color.a = (.55 if Config.settings.visual_audio else .4)*(1-amount)*(1-amount)
+		signals_layer.draw_arc(_xy(ripple)*32,maxf(2,radius*amount),0,TAU,48,color,2.0 if Config.settings.visual_audio else 1.2)
 	for footprint: Dictionary in Session.snap.get("footprints",[]):
 		var pos: Vector2 = _xy(footprint)*32
 		signals_layer.draw_line(pos,pos+Vector2(4,0).rotated(float(footprint.get("dir",0))),Color(0.8,.8,1,.4),3)
