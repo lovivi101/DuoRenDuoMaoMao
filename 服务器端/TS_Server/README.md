@@ -4,6 +4,8 @@ Node 22 + TypeScript strict + ESM 的服务端初版，HTTP 默认 `8787`，WebS
 
 ## 启动
 
+`package-lock.json` 使用官方源 `registry.npmjs.org`。国内安装慢时在本机配置镜像即可（npm 会自动把锁文件里的官方源替换为所配源），不要把镜像地址提交进锁文件：`npm config set registry https://registry.npmmirror.com`。
+
 ```powershell
 npm install
 Copy-Item .env.example .env
@@ -17,7 +19,7 @@ npm run map:ascii
 npm run bots -- --room 123456 --n 3
 ```
 
-`JWT_SECRET`、`PORT`、`MATCH_MIN_PLAYERS`、`MAP_DURATION_SEC` 可在 `.env` 调整。开发模式下微信接受 `mock_` 开头的 code；短信验证码会打印日志并在响应中返回 `devCode`。生产环境请配置微信服务商与短信服务商并关闭开发回显。
+`JWT_SECRET`、`PORT`、`MATCH_MIN_PLAYERS`、`MAP_DURATION_SEC` 可在 `.env` 调整。生产环境（`NODE_ENV=production`）必须设置自己的 `JWT_SECRET`（≥32 字符），未设置或沿用开发默认值 / `.env.example` 示例值时服务器拒绝启动。开发模式下微信接受 `mock_` 开头的 code；短信验证码会打印日志并在响应中返回 `devCode`。生产环境请配置微信服务商与短信服务商并关闭开发回显。
 
 `DEV_HUNT_SEC`、`DEV_HIDE_SEC`、`DEV_ASSIGN_SEC`、`DEV_RESULT_SEC`、`DEV_VOTE_SEC` 是可选的开发时长覆盖值，单位秒；未设置时使用原有时长，生产环境忽略。值须大于 0 且不超过 3600。例如联调可设 `DEV_HUNT_SEC=90`、`DEV_HIDE_SEC=5`。`MATCH_MIN_PLAYERS` 保持原有含义。
 
