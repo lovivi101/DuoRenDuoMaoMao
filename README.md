@@ -34,5 +34,5 @@ Godot_v4.7.2-stable_win64.exe --path .
 
 ## 验证
 
-- 服务器：`npm test`（34 个测试）、`npm run sim`（无头模拟一局）、`npm run sim:batch -- --n 30`（平衡统计，默认 10 分钟局藏者胜率约 50%）。
+- 服务器：`npm test`（37 个测试）、`npm run sim`（无头模拟一局）、`npm run sim:batch -- --n 30`（平衡统计，默认 10 分钟局藏者胜率约 50%）。
 - 客户端：`tests/scene_load.gd`（19 个界面 + 局内场景加载）、`tests/smoke_flow.gd`（端到端协议流程）、`-- --autoplay`（连真服务器打完整一局并截图到 `docs/screenshots/`）。

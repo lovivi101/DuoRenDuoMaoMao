@@ -2,6 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {hashPassword,verifyPassword,signToken,verifyToken,safeUser} from '../src/auth.js';
 import {Api} from '../src/http/api.js';
 import {SqliteStore} from '../src/store/store.js';
+import {jwtSecret} from '../src/game/config.js';
 const secret='test-only-secret-32-characters-long';
 describe('auth and persistence',()=>{
  it('uses asynchronous scrypt with random salt and validates JWT expiry, tampering, segment count',async()=>{
@@ -9,6 +10,13 @@ describe('auth and persistence',()=>{
  expect(await verifyPassword('secret123',a.salt,a.hash)).toBe(true);expect(await verifyPassword('wrong',a.salt,a.hash)).toBe(false);
  const token=signToken('u_test',secret,60,100000);expect(verifyToken(token,secret,110000)).toBe('u_test');
  expect(verifyToken(token,secret,160000)).toBeNull();expect(verifyToken(token+'.x',secret,110000)).toBeNull();expect(verifyToken(token,secret+'x',110000)).toBeNull();
+ });
+ it('rejects missing or public JWT secrets in production',()=>{
+ expect(jwtSecret({NODE_ENV:'production'})).toBe('');
+ expect(jwtSecret({NODE_ENV:'production',JWT_SECRET:'dev-only-secret-change-me-32-characters-minimum'})).toBe('');
+ expect(jwtSecret({NODE_ENV:'production',JWT_SECRET:'change-me-in-production-xideng-server-secret-32'})).toBe('');
+ expect(jwtSecret({NODE_ENV:'production',JWT_SECRET:secret})).toBe(secret);
+ expect(jwtSecret({NODE_ENV:'development'}).length).toBeGreaterThanOrEqual(32);
  });
  it('register/password/profile/guest and SMS cooldown, expiry, five failures, one-time consumption',async()=>{
  const store=new SqliteStore(':memory:');let now=100000;const api=new Api(store,secret,()=> 'offline',()=>now);

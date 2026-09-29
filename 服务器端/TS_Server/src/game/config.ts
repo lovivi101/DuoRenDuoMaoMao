@@ -6,9 +6,17 @@ export function devSeconds(name:string,fallback:number|undefined,env:NodeJS.Proc
  if(!Number.isFinite(value)||value<=0||value>3600)throw Error(`${name} must be > 0 and <= 3600 seconds`);
  return value;
 }
+// Production must set its own JWT_SECRET; the development fallback and the
+// .env.example placeholder are public, so they are rejected there (empty => server refuses to start).
+const PUBLIC_SECRETS=['dev-only-secret-change-me-32-characters-minimum','change-me-in-production-xideng-server-secret-32'];
+export function jwtSecret(env:NodeJS.ProcessEnv=process.env){
+ const s=env.JWT_SECRET?.trim()||'';
+ if(env.NODE_ENV==='production')return PUBLIC_SECRETS.includes(s)?'':s;
+ return s||PUBLIC_SECRETS[0];
+}
 // Development can lower the queue threshold to one player so a client can
 // exercise the complete room/game protocol alone; production remains 8.
-export const CONFIG={port:Number(process.env.PORT||8787),jwtSecret:process.env.JWT_SECRET||'dev-only-secret-change-me-32-characters-minimum',matchMinPlayers:process.env.NODE_ENV==='production'?8:Math.max(1,Math.min(12,Number(process.env.MATCH_MIN_PLAYERS)||8)),tickHz:20,assignSec:devSeconds('DEV_ASSIGN_SEC',5)!,hideSec:devSeconds('DEV_HIDE_SEC',20)!,resultSec:devSeconds('DEV_RESULT_SEC',15)!,voteSec:devSeconds('DEV_VOTE_SEC',10)!,huntSec:devSeconds('DEV_HUNT_SEC',undefined),reconnectSec:30,smsCooldownMs:60000,smsTtlMs:300000,smsMaxAttempts:5};
+export const CONFIG={port:Number(process.env.PORT||8787),jwtSecret:jwtSecret(),matchMinPlayers:process.env.NODE_ENV==='production'?8:Math.max(1,Math.min(12,Number(process.env.MATCH_MIN_PLAYERS)||8)),tickHz:20,assignSec:devSeconds('DEV_ASSIGN_SEC',5)!,hideSec:devSeconds('DEV_HIDE_SEC',20)!,resultSec:devSeconds('DEV_RESULT_SEC',15)!,voteSec:devSeconds('DEV_VOTE_SEC',10)!,huntSec:devSeconds('DEV_HUNT_SEC',undefined),reconnectSec:30,smsCooldownMs:60000,smsTtlMs:300000,smsMaxAttempts:5};
 // Bot behaviour knobs. Tuned with `npm run sim:batch` at the default 600s hunt;
 // these shape AI decisions only and never change the design-doc rules below.
 export const AI={
