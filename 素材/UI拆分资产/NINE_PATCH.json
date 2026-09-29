@@ -1,11 +1,83 @@
 {
-  "button_primary_yellow": [
+  "panel_header_bar": [
     24,
-    16,
     24,
-    16
+    24,
+    24
   ],
-  "button_primary_yellow_pressed": [
+  "panel_content_large": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_modal": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_list_row": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_input_field": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_bottom_nav": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_top_resource_bar": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_toast": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_player_card": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_score_row": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_keypad": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_room_code_cell": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_notice_board": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "button_primary_yellow": [
     24,
     16,
     24,
@@ -17,13 +89,19 @@
     24,
     16
   ],
-  "button_secondary_dark_pressed": [
+  "button_danger_red": [
     24,
     16,
     24,
     16
   ],
-  "button_danger_red": [
+  "button_wechat_green": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_phone_blue": [
     24,
     16,
     24,
@@ -41,7 +119,7 @@
     24,
     16
   ],
-  "button_phone_blue": [
+  "button_small_action": [
     24,
     16,
     24,
@@ -53,13 +131,103 @@
     24,
     16
   ],
-  "button_small_action": [
+  "button_round_icon": [
     24,
     16,
     24,
     16
   ],
-  "button_wechat_green": [
+  "tab_active": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "tab_inactive": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "toggle_on": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "toggle_off": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "checkbox_on": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "checkbox_off": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "slider_track": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "slider_fill": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "slider_knob": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "card_role_back": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "card_role_front": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "card_map_frame": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "progress_bar_frame": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "progress_bar_fill": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_primary_yellow_pressed": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_secondary_dark_pressed": [
     24,
     16,
     24,
@@ -71,28 +239,16 @@
     24,
     16
   ],
-  "panel_modal": [
-    24,
-    24,
-    24,
-    24
+  "hud-stamina-frame": [
+    10,
+    8,
+    10,
+    8
   ],
-  "panel_content_large": [
+  "event-warning-banner": [
     24,
+    12,
     24,
-    24,
-    24
-  ],
-  "panel_header_bar": [
-    20,
-    20,
-    20,
-    20
-  ],
-  "progress_bar_frame": [
-    12,
-    12,
-    12,
     12
   ]
 }

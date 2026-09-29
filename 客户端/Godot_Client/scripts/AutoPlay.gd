@@ -76,7 +76,10 @@ func _process(_delta: float) -> void:
 				_shot("live-hunt-%02ds-%s" % [s, Session.role()])
 
 func _shot(name: String) -> void:
-	await RenderingServer.frame_post_draw
+	# Force a draw: when the window is hidden, minimized or the screen is locked the OS stops
+	# presenting frames and frame_post_draw would never fire.
+	await get_tree().process_frame
+	RenderingServer.force_draw(false)
 	var image: Image = get_viewport().get_texture().get_image()
 	if image == null:
 		print("AUTOPLAY SHOT FAILED (no image) ", name)

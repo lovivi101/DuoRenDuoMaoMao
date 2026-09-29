@@ -40,8 +40,9 @@ def trim(im):
 def slice_sheet(src, job):
     im=remove_chroma(Image.open(src).convert('RGBA')); w,h=im.size
     cols,rows=job.get('cols',4),job.get('rows',3); names=job['names']
-    # Assign connected objects to the nearest declared grid center. This avoids
-    # cutting wide objects at the nominal grid edge, and groups detached sparkles.
+    # Assign connected objects to the nearest declared grid center. Do not union
+    # every object in the bucket: a stray piece from an adjacent component may
+    # have landed there. Keep the largest region plus details within six pixels.
     arr=np.asarray(im); labels,regions=components(arr[:,:,3]>8)
     buckets=[[] for _ in names]
     for k,sl,area in regions:
@@ -51,6 +52,12 @@ def slice_sheet(src, job):
     for i,n in enumerate(names):
         regions=buckets[i]
         if not regions: raise ValueError(f'{job["id"]}/{n}: no connected content')
+        main=max(regions,key=lambda r:r[2])
+        from scipy.ndimage import distance_transform_edt
+        main_mask=labels==main[0]
+        distance=distance_transform_edt(~main_mask)
+        regions=[r for r in regions if r[0]==main[0] or
+                 np.min(distance[r[1]][labels[r[1]]==r[0]])<6]
         x0=min(sl[1].start for _,sl,_ in regions); x1=max(sl[1].stop for _,sl,_ in regions)
         y0=min(sl[0].start for _,sl,_ in regions); y1=max(sl[0].stop for _,sl,_ in regions)
         cropped=arr[y0:y1,x0:x1].copy(); kept=np.isin(labels[y0:y1,x0:x1],[k for k,_,_ in regions]); cropped[~kept]=0
