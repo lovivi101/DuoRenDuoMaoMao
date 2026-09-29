@@ -1,0 +1,89 @@
+[
+  {
+    "id": "panels",
+    "source": "C:\\Users\\Administrator\\.codex\\generated_images\\01a0e59e-ba4f-7c21-a453-2b1c9004e90d\\exec-3e5fe3e7-b99d-455c-8027-fcd074e3f8e7.png",
+    "prompt": "Match attached official reference images: cute midnight pixel-art UI for Chinese game 熄灯, dark navy-purple #1B1633/#2A2350, lavender 2px stepped outlines, warm yellow #FFC857 light accents. Polished crisp pixel edges, cozy slightly spooky modern dormitory, NO medieval metal, NO lettering or numerals. Hunter is black-clothed red-eyed BOY HOLDING FLASHLIGHT, NEVER KNIFE. Guardian angel ghost has halo and wings; wraith ghost has devil horns. Generate ONE production component sprite sheet, 2048x1536, exactly 4 columns x 3 rows equally spaced. TRUE transparent background if supported, otherwise perfectly flat #FF00FF magenta chroma, no grid lines, no shadows outside components. Each cell contains one fully isolated blank UI panel with 15% padding. All panel interiors flat solid navy purple, evenly thin lavender border, tiny warm pixel decorations only in four corners; suitable for nine-slice stretch. Cell contents row-major: 1 wide header bar 4:1; 2 large content panel 4:3; 3 modal dialog 3:2; 4 list row 5:1; 5 input field 5:1; 6 bottom navigation bar 6:1; 7 top resource bar 4:1; 8 toast bubble 4:1; 9 player card 3:4; 10 score row 5:1; 11 keypad backing 4:3; 12 room code cell square. ABSOLUTELY NO text, icons, letters, numbers or subjects in panels.",
+    "cols": 4,
+    "rows": 3,
+    "names": [
+      "panel_header_bar",
+      "panel_content_large",
+      "panel_modal",
+      "panel_list_row",
+      "panel_input_field",
+      "panel_bottom_nav",
+      "panel_top_resource_bar",
+      "panel_toast",
+      "panel_player_card",
+      "panel_score_row",
+      "panel_keypad",
+      "panel_room_code_cell"
+    ]
+  },
+  {
+    "id": "buttons",
+    "names": [
+      "button_primary_yellow",
+      "button_secondary_dark",
+      "button_danger_red",
+      "button_wechat_green",
+      "button_phone_blue",
+      "button_account_purple",
+      "button_guest_ghost",
+      "button_small_action",
+      "button_ready_green",
+      "button_primary_yellow_pressed",
+      "button_secondary_dark_pressed",
+      "button_wechat_green_pressed"
+    ],
+    "desc": "All 12 objects are blank horizontal rectangular buttons 4:1 aspect, stepped pixel corners, evenly thin border, FLAT blank middle, decorations only at corners, nine-slice friendly. 1 warm yellow primary; 2 dark indigo secondary; 3 danger red; 4 WeChat emerald green; 5 phone blue; 6 account purple; 7 muted lavender guest; 8 small warm yellow action; 9 ready mint green; 10 depressed darker amber primary PRESSED; 11 depressed darker indigo secondary PRESSED; 12 depressed darker emerald WeChat PRESSED. NO symbols or text.",
+    "prompt": "Match attached official reference images: cute midnight pixel-art UI for Chinese game 熄灯, dark navy-purple #1B1633/#2A2350, lavender 2px stepped outlines, warm yellow #FFC857 light accents. Polished crisp pixel edges, cozy slightly spooky modern dormitory, NO medieval metal, NO lettering or numerals. Hunter is black-clothed red-eyed BOY HOLDING FLASHLIGHT, NEVER KNIFE. Guardian angel ghost has halo and wings; wraith ghost has devil horns. Create a CLEAN PRODUCTION sprite sheet with exactly 4 columns x 3 rows, 12 equally sized cells; row-major order. Every component fully isolated, centered within its cell with generous 16% empty margin, no overlap, no cropped edges. True transparent background, fallback flat pure #FF00FF. No checkerboard, no grid, no cell labels. No text or numbers. All 12 objects are blank horizontal rectangular buttons 4:1 aspect, stepped pixel corners, evenly thin border, FLAT blank middle, decorations only at corners, nine-slice friendly. 1 warm yellow primary; 2 dark indigo secondary; 3 danger red; 4 WeChat emerald green; 5 phone blue; 6 account purple; 7 muted lavender guest; 8 small warm yellow action; 9 ready mint green; 10 depressed darker amber primary PRESSED; 11 depressed darker indigo secondary PRESSED; 12 depressed darker emerald WeChat PRESSED. NO symbols or text.",
+    "source": "C:\\Users\\Administrator\\.codex\\generated_images\\01a0e59e-ba4f-7c21-a453-2b1c9004e90d\\exec-5a5c385e-4f8f-4378-9408-a60257359dab.png",
+    "cols": 4,
+    "rows": 3
+  },
+  {
+    "id": "controls",
+    "names": [
+      "button_round_icon",
+      "tab_active",
+      "tab_inactive",
+      "toggle_on",
+      "toggle_off",
+      "checkbox_on",
+      "checkbox_off",
+      "slider_track",
+      "slider_fill",
+      "slider_knob",
+      "progress_bar_frame",
+      "progress_bar_fill"
+    ],
+    "desc": "1 blank dark round icon button; 2 selected amber rectangular tab; 3 unselected dark rectangular tab; 4 on toggle amber rail white knob RIGHT; 5 off toggle dark rail lavender knob LEFT; 6 checkbox yellow check; 7 empty square checkbox; 8 long thin empty dark slider track; 9 long thin solid yellow slider fill; 10 round lavender slider knob; 11 long thin dark progress bar EMPTY frame; 12 long thin solid yellow progress fill. All bar centers flat and unpatterned, uniform outlines.",
+    "prompt": "Match attached official reference images: cute midnight pixel-art UI for Chinese game 熄灯, dark navy-purple #1B1633/#2A2350, lavender 2px stepped outlines, warm yellow #FFC857 light accents. Polished crisp pixel edges, cozy slightly spooky modern dormitory, NO medieval metal, NO lettering or numerals. Hunter is black-clothed red-eyed BOY HOLDING FLASHLIGHT, NEVER KNIFE. Guardian angel ghost has halo and wings; wraith ghost has devil horns. Create a CLEAN PRODUCTION sprite sheet with exactly 4 columns x 3 rows, 12 equally sized cells; row-major order. Every component fully isolated, centered within its cell with generous 16% empty margin, no overlap, no cropped edges. True transparent background, fallback flat pure #FF00FF. No checkerboard, no grid, no cell labels. No text or numbers. 1 blank dark round icon button; 2 selected amber rectangular tab; 3 unselected dark rectangular tab; 4 on toggle amber rail white knob RIGHT; 5 off toggle dark rail lavender knob LEFT; 6 checkbox yellow check; 7 empty square checkbox; 8 long thin empty dark slider track; 9 long thin solid yellow slider fill; 10 round lavender slider knob; 11 long thin dark progress bar EMPTY frame; 12 long thin solid yellow progress fill. All bar centers flat and unpatterned, uniform outlines.",
+    "source": "C:\\Users\\Administrator\\.codex\\generated_images\\01a0e59e-ba4f-7c21-a453-2b1c9004e90d\\exec-95b4686b-b217-4801-8822-2ed4caf415c1.png",
+    "cols": 4,
+    "rows": 3
+  },
+  {
+    "id": "icons1",
+    "names": [
+      "wechat-icon",
+      "qq-icon",
+      "phone-icon",
+      "lock-icon",
+      "user-icon",
+      "eye-open-icon",
+      "eye-closed-icon",
+      "back-icon",
+      "close-icon",
+      "settings-icon",
+      "sound-on-icon",
+      "sound-off-icon"
+    ],
+    "desc": "Twelve stand-alone clearly readable pixel icons, NO square button backplates: 1 two WHITE chat bubbles WeChat; 2 cute penguin QQ; 3 mobile phone; 4 padlock; 5 person silhouette; 6 open eye; 7 closed eye with diagonal slash; 8 left back arrow; 9 X close; 10 settings gear; 11 speaker with waves; 12 muted speaker with slash. Lavender/white/gold, large simple silhouettes.",
+    "prompt": "Match attached official reference images: cute midnight pixel-art UI for Chinese game 熄灯, dark navy-purple #1B1633/#2A2350, lavender 2px stepped outlines, warm yellow #FFC857 light accents. Polished crisp pixel edges, cozy slightly spooky modern dormitory, NO medieval metal, NO lettering or numerals. Hunter is black-clothed red-eyed BOY HOLDING FLASHLIGHT, NEVER KNIFE. Guardian angel ghost has halo and wings; wraith ghost has devil horns. Create a CLEAN PRODUCTION sprite sheet with exactly 4 columns x 3 rows, 12 equally sized cells; row-major order. Every component fully isolated, centered within its cell with generous 16% empty margin, no overlap, no cropped edges. True transparent background, fallback flat pure #FF00FF. No checkerboard, no grid, no cell labels. No text or numbers. Twelve stand-alone clearly readable pixel icons, NO square button backplates: 1 two WHITE chat bubbles WeChat; 2 cute penguin QQ; 3 mobile phone; 4 padlock; 5 person silhouette; 6 open eye; 7 closed eye with diagonal slash; 8 left back arrow; 9 X close; 10 settings gear; 11 speaker with waves; 12 muted speaker with slash. Lavender/white/gold, large simple silhouettes.",
+    "source": "C:\\Users\\Administrator\\.codex\\generated_images\\01a0e59e-ba4f-7c21-a453-2b1c9004e90d\\exec-1500a8cc-8175-4d57-92a0-1e4101b9c4a3.png",
+    "cols": 4,
+    "rows": 3
+  }
+]

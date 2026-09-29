@@ -1,0 +1,6 @@
+{
+  "name":"xideng-ts-server","version":"0.1.0","type":"module","private":true,
+  "scripts":{"dev":"tsx watch src/index.ts","build":"tsc","start":"node dist/index.js","test":"vitest run","sim":"tsx src/sim.ts","sim:batch":"tsx src/sim_batch.ts","map:ascii":"tsx src/game/maps/old_dorm.ts --ascii","bots":"tsx src/bots.ts"},
+  "dependencies":{"dotenv":"^16.4.5","ws":"^8.18.0"},
+  "devDependencies":{"@types/node":"^22.10.0","@types/ws":"^8.5.13","tsx":"^4.19.2","typescript":"^5.7.2","vitest":"^2.1.8"}
+}

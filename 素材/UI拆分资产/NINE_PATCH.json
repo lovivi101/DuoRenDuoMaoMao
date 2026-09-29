@@ -1,0 +1,98 @@
+{
+  "button_primary_yellow": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_primary_yellow_pressed": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_secondary_dark": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_secondary_dark_pressed": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_danger_red": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_account_purple": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_guest_ghost": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_phone_blue": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_ready_green": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_small_action": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_wechat_green": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "button_wechat_green_pressed": [
+    24,
+    16,
+    24,
+    16
+  ],
+  "panel_modal": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_content_large": [
+    24,
+    24,
+    24,
+    24
+  ],
+  "panel_header_bar": [
+    20,
+    20,
+    20,
+    20
+  ],
+  "progress_bar_frame": [
+    12,
+    12,
+    12,
+    12
+  ]
+}

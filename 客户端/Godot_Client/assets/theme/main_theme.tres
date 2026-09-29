@@ -1,0 +1,13 @@
+[gd_resource type="Theme" load_steps=3 format=3]
+
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansSC-Regular.otf" id="1"]
+[ext_resource type="FontFile" path="res://assets/fonts/FusionPixelZH.ttf" id="2"]
+
+[resource]
+default_font = ExtResource("1")
+default_font_size = 16
+Button/colors/font_color = Color(0.98, 0.95, 0.82, 1)
+Button/colors/font_hover_color = Color(1, 1, 1, 1)
+Label/colors/font_color = Color(0.98, 0.95, 0.82, 1)
+LineEdit/colors/font_color = Color(0.98, 0.95, 0.82, 1)
+LineEdit/colors/font_placeholder_color = Color(0.66, 0.64, 0.78, 1)

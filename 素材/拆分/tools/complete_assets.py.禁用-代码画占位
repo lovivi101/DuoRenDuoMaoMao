@@ -1,0 +1,158 @@
+from pathlib import Path
+import math, shutil, csv, json, re
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import numpy as np
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from catalog import ROOT, OUT, MASTER, WORK, categories, target_size, pages
+
+NAVY=(27,22,51,255); NAVY2=(42,35,80,255); LAV=(167,145,255,255); Y=(255,200,87,255); RED=(229,56,59,255); WHITE=(244,242,255,255); CYAN=(101,220,255,255); GREEN=(7,193,96,255)
+
+def canvas(size, bg=(0,0,0,0)): return Image.new('RGBA', size, bg)
+def save_if_missing(name, cat, im):
+    p=MASTER/cat/(name+'.png'); p.parent.mkdir(parents=True,exist_ok=True)
+    if not p.exists(): im.save(p)
+def fit(im,size,alpha=True):
+    im=im.convert('RGBA'); im.thumbnail((size[0]-8,size[1]-8),Image.Resampling.LANCZOS)
+    c=canvas(size); c.alpha_composite(im,((size[0]-im.width)//2,(size[1]-im.height)//2)); return c
+def icon(kind, size=(128,128), color=Y):
+    im=canvas(size); d=ImageDraw.Draw(im); w,h=size; cx,cy=w//2,h//2
+    d.ellipse((8,8,w-8,h-8), fill=(38,29,75,255), outline=LAV, width=max(2,w//32))
+    c=color
+    if kind in ('back','exit'): d.line((78,32,40,64,78,96), fill=c, width=10, joint='curve')
+    elif kind=='close': d.line((38,38,90,90),fill=c,width=10); d.line((90,38,38,90),fill=c,width=10)
+    elif kind in ('plus','add-friend'): d.line((64,30,64,98),fill=c,width=10); d.line((30,64,98,64),fill=c,width=10)
+    elif kind in ('check','ready'): d.line((30,65,55,90,100,35),fill=c,width=12,joint='curve')
+    elif kind in ('heart','crown','star','trophy','coin','gem','timer','map','dice','search','refresh','mic','robot','skull','friends','share','copy','invite','mail','notice','wardrobe','shop','record','task','vibration','sound-on','sound-off','eye-open','eye-closed','lock','user','phone','wechat','qq','settings','exit'):
+        if kind=='heart': d.polygon([(64,99),(24,58),(24,38),(38,26),(54,30),(64,44),(74,30),(90,26),(104,38),(104,58)],fill=(240,90,130,255),outline=WHITE)
+        elif kind=='crown': d.polygon([(25,85),(18,36),(45,62),(64,24),(83,62),(110,36),(103,85)],fill=Y,outline=WHITE)
+        elif kind=='star':
+            pts=[]
+            for i in range(10):
+                a=-math.pi/2+i*math.pi/5; r=42 if i%2==0 else 18; pts.append((cx+math.cos(a)*r,cy+math.sin(a)*r))
+            d.polygon(pts,fill=Y,outline=WHITE)
+        elif kind in ('coin','gem'): d.polygon([(64,18),(94,45),(82,94),(46,94),(34,45)],fill=Y if kind=='coin' else CYAN,outline=WHITE)
+        elif kind=='trophy': d.rectangle((43,30,85,82),fill=Y,outline=WHITE); d.arc((20,35,53,72),90,270,fill=Y,width=8); d.arc((75,35,108,72),270,90,fill=Y,width=8); d.rectangle((56,82,72,100),fill=Y); d.rectangle((42,99,86,108),fill=Y)
+        elif kind in ('sound-on','sound-off'): d.polygon([(28,55),(45,55),(65,35),(65,93),(45,73),(28,73)],fill=WHITE); d.arc((57,38,100,90),300,60,fill=c,width=7)
+        elif kind.startswith('eye'): d.ellipse((25,38,103,90),outline=WHITE,width=7); d.ellipse((56,52,72,68),fill=c); 
+        elif kind=='lock': d.rounded_rectangle((34,50,94,100),10,fill=c,outline=WHITE,width=6); d.arc((43,20,85,72),180,360,fill=c,width=10)
+        elif kind=='user': d.ellipse((48,25,80,57),fill=c); d.ellipse((31,55,97,108),fill=c)
+        elif kind=='phone': d.rounded_rectangle((38,18,90,110),10,fill=c,outline=WHITE,width=6); d.rectangle((47,30,81,88),fill=NAVY); d.ellipse((61,96,67,102),fill=WHITE)
+        elif kind in ('wechat','share','copy','invite','mail'): d.rounded_rectangle((26,35,82,80),12,fill=c,outline=WHITE,width=5); d.ellipse((56,48,106,88),fill=c,outline=WHITE,width=5)
+        elif kind=='settings':
+            d.ellipse((34,34,94,94),outline=c,width=15); d.ellipse((53,53,75,75),fill=NAVY)
+            for a in range(0,360,45):
+                x=cx+math.cos(math.radians(a))*42; y=cy+math.sin(math.radians(a))*42; d.rectangle((x-6,y-6,x+6,y+6),fill=c)
+        elif kind=='robot': d.rounded_rectangle((28,35,100,92),12,fill=WHITE,outline=c,width=5); d.ellipse((46,54,57,65),fill=c); d.ellipse((71,54,82,65),fill=c); d.line((64,35,64,20),fill=c,width=5); d.ellipse((59,12,69,22),fill=Y)
+        elif kind=='skull': d.ellipse((34,25,94,80),fill=WHITE,outline=RED,width=5); d.rectangle((46,72,82,100),fill=WHITE); d.ellipse((48,46,60,59),fill=RED); d.ellipse((68,46,80,59),fill=RED)
+        elif kind=='map': d.rectangle((25,30,103,95),fill=(57,78,125,255),outline=WHITE,width=6); d.line((35,80,55,55,73,72,96,40),fill=Y,width=5)
+        elif kind=='dice': d.rounded_rectangle((28,28,100,100),10,fill=WHITE,outline=c,width=5); d.ellipse((45,45,55,55),fill=c); d.ellipse((73,73,83,83),fill=c); d.ellipse((73,45,83,55),fill=c)
+        elif kind=='search': d.ellipse((28,25,80,77),outline=c,width=10); d.line((70,70,105,105),fill=c,width=10)
+        elif kind=='refresh': d.arc((25,25,100,100),40,320,fill=c,width=9); d.polygon([(88,28),(104,32),(98,48)],fill=c)
+        elif kind=='mic': d.rounded_rectangle((48,24,80,76),14,fill=c); d.arc((34,45,94,100),0,180,fill=c,width=8); d.line((64,98,64,108),fill=c,width=8)
+        elif kind=='vibration': d.line((35,45,25,35),fill=c,width=7); d.line((93,45,103,35),fill=c,width=7); d.rounded_rectangle((45,28,83,98),10,fill=WHITE,outline=c,width=6)
+        elif kind=='friends': d.ellipse((34,28,62,56),fill=c); d.ellipse((66,34,90,58),fill=c); d.ellipse((24,55,72,100),fill=c); d.ellipse((60,60,102,100),fill=c)
+        elif kind=='mail': d.rectangle((25,35,103,92),fill=c,outline=WHITE,width=5); d.line((25,40,64,70,103,40),fill=WHITE,width=5)
+        elif kind=='notice': d.rectangle((34,28,94,102),fill=WHITE,outline=c,width=5); d.line((45,48,84,48),fill=c,width=5); d.line((45,64,84,64),fill=c,width=5)
+        elif kind=='wardrobe': d.rectangle((35,25,93,105),fill=c,outline=WHITE,width=5); d.line((64,28,64,102),fill=WHITE,width=4)
+        elif kind=='shop': d.rectangle((30,48,98,98),fill=c,outline=WHITE,width=5); d.line((25,48,103,48),fill=WHITE,width=6); d.line((45,25,83,25),fill=WHITE,width=7)
+        elif kind=='record': d.rectangle((30,28,98,100),fill=WHITE,outline=c,width=5); d.line((44,48,84,48),fill=c,width=5); d.line((44,65,84,65),fill=c,width=5)
+        elif kind=='task': d.rectangle((30,25,98,102),fill=WHITE,outline=c,width=5); d.line((44,48,84,48),fill=c,width=5); d.line((44,70,84,70),fill=c,width=5)
+        elif kind=='exit': d.rectangle((28,26,80,102),fill=WHITE,outline=c,width=5); d.line((56,64,106,64),fill=c,width=10); d.line((90,48,106,64,90,80),fill=c,width=8)
+    else: d.ellipse((32,32,96,96),fill=c)
+    return im
+
+def make_background(name):
+    w,h=1334,750; im=Image.new('RGB',(w,h)); px=im.load();
+    palettes={'bg-splash-dorm-night':((11,14,35),(48,32,84)),'bg-login-dorm-gate':((18,20,48),(75,47,85)),'bg-lobby-dorm-hall':((20,24,55),(71,50,90)),'bg-matching-corridor':((11,18,42),(42,42,82)),'bg-room-waiting-hall':((22,19,52),(67,42,77)),'bg-role-reveal-dark':((6,8,25),(35,20,65)),'bg-map-vote-blueprint':((17,31,59),(31,67,92)),'bg-result-dawn':((65,39,58),(203,116,84)),'bg-menu-dim':((10,10,28),(34,25,57))}
+    a,b=palettes.get(name,((10,10,28),(34,25,57)))
+    for y in range(h):
+        t=y/(h-1)
+        col=tuple(int(a[i]*(1-t)+b[i]*t) for i in range(3))
+        for x in range(w): px[x,y]=col
+    d=ImageDraw.Draw(im); random_seed=abs(hash(name))%1000
+    for x in range(70,w,120):
+        d.rectangle((x,180,x+70,600),fill=(12,14,37)); d.rectangle((x+12,220,x+58,275),fill=(255,200,87)); d.rectangle((x+12,330,x+58,385),fill=(84,93,152))
+    d.rectangle((0,610,w,750),fill=(14,15,35));
+    for x in range(0,w,64): d.line((x,610,x+32,750),fill=(35,28,66),width=2)
+    return im
+
+def make_panel(name,size):
+    im=canvas(size); d=ImageDraw.Draw(im); w,h=size; d.rounded_rectangle((4,4,w-5,h-5),12,fill=NAVY2,outline=LAV,width=4); d.rectangle((18,18,w-19,h-19),fill=(35,29,69,255));
+    for x,y in [(12,12),(w-28,12),(12,h-28),(w-28,h-28)]: d.rectangle((x,y,x+14,y+14),fill=Y)
+    return im
+
+def make_button(name,size):
+    colors={'button_primary_yellow':Y,'button_secondary_dark':(73,64,119,255),'button_danger_red':RED,'button_wechat_green':GREEN,'button_phone_blue':(55,134,227,255),'button_account_purple':(137,91,214,255),'button_guest_ghost':(180,177,220,255),'button_small_action':Y,'button_ready_green':(102,220,160,255),'button_primary_yellow_pressed':(194,143,38,255),'button_secondary_dark_pressed':(47,39,83,255),'button_wechat_green_pressed':(4,139,67,255)}
+    im=canvas(size); d=ImageDraw.Draw(im); c=colors.get(name,Y); d.rounded_rectangle((4,4,size[0]-5,size[1]-5),16,fill=c,outline=WHITE,width=4); d.line((22,20,size[0]-22,20),fill=(255,255,255,90),width=3); return im
+
+def make_hud(name,size):
+    im=canvas(size); d=ImageDraw.Draw(im); w,h=size
+    if 'vignette' in name:
+        arr=np.zeros((h,w,4),dtype=np.uint8); yy,xx=np.mgrid[0:h,0:w]; dist=np.minimum.reduce([xx,w-1-xx,yy,h-1-yy]); alpha=np.clip((80-dist)*2,0,120).astype(np.uint8); arr[:,:,:3]=[180,18,35]; arr[:,:,3]=alpha; return Image.fromarray(arr)
+    if h < 80 or w/h > 3:
+        d.rounded_rectangle((4,4,w-5,h-5),8,fill=(22,24,54,220),outline=LAV,width=max(2,min(w,h)//12))
+    else:
+        d.ellipse((4,4,w-5,h-5),fill=(22,24,54,220),outline=LAV,width=max(3,w//32)); d.ellipse((24,24,w-25,h-25),outline=(100,88,160,220),width=max(2,w//48))
+    if 'joystick' in name: d.ellipse((w//2-35,h//2-35,w//2+35,h//2+35),fill=(90,76,150,240),outline=Y,width=4)
+    elif 'stamina' in name or 'timer' in name or 'counter' in name: d.rounded_rectangle((8,h//3,w-8,h*2//3),10,fill=(33,27,70,230),outline=LAV,width=3)
+    else: d.ellipse((w//2-28,h//2-28,w//2+28,h//2+28),fill=Y,outline=WHITE,width=3)
+    return im
+
+def generic_asset(name,cat):
+    size=target_size(name)
+    if cat=='01-背景': return make_background(name)
+    if cat=='13-地图卡':
+        im=make_background('bg-map-vote-blueprint').resize(size,Image.Resampling.LANCZOS); d=ImageDraw.Draw(im); d.rectangle((30,30,size[0]-30,size[1]-30),outline=(120,190,220),width=4); return im
+    if cat=='03-面板': return make_panel(name,size)
+    if cat=='04-按钮':
+        if name.startswith('card_'): return make_panel(name,size)
+        return make_button(name,size)
+    if cat in ('05-图标','10-事件图标'): return icon(name.replace('-icon',''),size)
+    if cat=='06-头像': return icon('user',size,(120,170,255,255))
+    if cat=='07-身份徽记': return icon('skull' if 'hunter' in name else 'star',size,RED if 'hunter' in name else Y)
+    if cat=='08-装饰':
+        im=canvas(size); d=ImageDraw.Draw(im); w,h=size; d.line((8,h//2,w-8,h//2),fill=Y,width=max(2,h//12)) if 'divider' in name else d.ellipse((8,8,w-8,h-8),outline=Y,width=max(3,w//18)); return im
+    if cat=='09-道具图标': return icon('star',size, CYAN if 'hider' in name else RED)
+    if cat=='11-HUD控件': return make_hud(name,size)
+    if cat=='12-局内精灵':
+        logical=(size[0]//4,size[1]//4) if name.startswith(('sprite-','prop-')) else size
+        im=canvas(logical); d=ImageDraw.Draw(im); w,h=logical
+        if name.startswith('tile-'):
+            base=(48,45,68,255) if 'floor' in name else (31,30,48,255); d.rectangle((0,0,w,h),fill=base); d.line((0,h-1,w,h-1),fill=(80,70,100,255),width=1); d.line((w-1,0,w-1,h),fill=(80,70,100,255),width=1)
+        elif name.startswith('sprite-'): d.ellipse((w//4,4,3*w//4,h//2),fill=(220,220,240,255)); d.rectangle((w//3,h//3,2*w//3,h-4),fill=(75,55,115,255)); d.rectangle((w//2-2,h//2,w//2+2,h//2+8),fill=Y)
+        else: d.rectangle((w//4,h//4,3*w//4,3*h//4),fill=(128,95,80,255),outline=LAV,width=1)
+        if name.startswith(('sprite-','prop-')): im=im.resize(size,Image.Resampling.NEAREST)
+        return im
+    if cat=='02-Logo':
+        im=canvas(size); d=ImageDraw.Draw(im); d.rounded_rectangle((8,8,size[0]-8,size[1]-8),24,fill=NAVY2,outline=Y,width=8); d.ellipse((size[0]//2-60,size[1]//2-60,size[0]//2+60,size[1]//2+60),fill=(255,200,87,255)); return im
+    return icon('star',size)
+
+def split_generated(sheet, names, cat, out_size):
+    im=Image.open(sheet).convert('RGBA'); W,H=im.size; cols=4; rows=4
+    for i,n in enumerate(names):
+        x0=i%cols*W//cols; y0=i//cols*H//rows; x1=(i%cols+1)*W//cols; y1=(i//cols+1)*H//rows
+        cell=im.crop((x0,y0,x1,y1)); a=np.asarray(cell); ys,xs=np.where(a[:,:,3]>8)
+        if len(xs): cell=cell.crop((max(0,xs.min()-4),max(0,ys.min()-4),min(cell.width,xs.max()+5),min(cell.height,ys.max()+5)))
+        save_if_missing(n,cat,fit(cell,out_size))
+
+def main():
+    # Integrate image_gen sheets when available.
+    av=Path(r'C:\Users\Administrator\.codex\generated_images\01a0e6e7-1615-7f11-9fec-7db8ba180522\exec-2e266ccd-24cb-49e8-bcb1-6577d40921f7.png')
+    if av.exists():
+        names=['avatar-hider-red','avatar-hider-orange','avatar-hider-yellow','avatar-hider-green','avatar-hider-cyan','avatar-hider-blue','avatar-hider-purple','avatar-hider-pink','avatar-hunter-warden','avatar-ghost-guardian','avatar-ghost-wraith','avatar-empty-slot','avatar-ai-bot','role-hunter','role-hider','role-mole']
+        split_generated(av,names,'06-头像',(256,256))
+        for n in ['role-hunter','role-hider','role-mole']: 
+            p=MASTER/'06-头像'/(n+'.png'); save_if_missing(n,'07-身份徽记',Image.open(p).convert('RGBA'))
+    for n,c in categories().items():
+        if n.endswith('_preview'): continue
+        p=MASTER/c/(n+'.png')
+        if not p.exists(): save_if_missing(n,c,generic_asset(n,c))
+    # Tile previews are 4x nearest-neighbor previews.
+    for n,c in categories().items():
+        if n.endswith('_preview'):
+            base=n[:-8]; p=MASTER/c/(base+'.png');
+            if p.exists(): save_if_missing(n,c,Image.open(p).resize((128,128),Image.Resampling.NEAREST))
+    print('generated missing assets')
+
+if __name__=='__main__': main()

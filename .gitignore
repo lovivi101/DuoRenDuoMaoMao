@@ -1,0 +1,36 @@
+# 本地环境二进制（etcd/go/postgres/redis），不入库
+Configure_environment/
+
+# 旧版服务器与其他客户端（非本次初版范围）
+服务器端/Due_Server/
+客户端/Cocos_Client/
+客户端/Web_Client/
+
+# Node
+node_modules/
+dist/
+*.log
+.env
+服务器端/TS_Server/data/*.db
+服务器端/TS_Server/data/*.db-*
+
+# Godot
+.godot/
+*.import.tmp
+客户端/Godot_Client/build/
+客户端/Godot_Client/export/
+
+# Codex 协作日志
+文档/协作/logs/
+
+# 系统
+Thumbs.db
+.DS_Store
+
+# Codex 临时中转目录
+tmp/
+
+
+# 被驳回的代码占位图（仅本地核对用，不发布）
+素材/拆分/占位待替换/
+
