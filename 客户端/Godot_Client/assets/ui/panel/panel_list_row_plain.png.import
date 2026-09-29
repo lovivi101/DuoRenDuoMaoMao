@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cpjqehm8r2ieg"
-path="res://.godot/imported/role-mole.png-c551a1b80dc06e28544dbea8d18a707b.ctex"
+uid="uid://ddxcln166e8r2"
+path="res://.godot/imported/panel_list_row_plain.png-5ac286ecab6ddd22803be6e4eb3a6b60.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/avatar/role-mole.png"
-dest_files=["res://.godot/imported/role-mole.png-c551a1b80dc06e28544dbea8d18a707b.ctex"]
+source_file="res://assets/ui/panel/panel_list_row_plain.png"
+dest_files=["res://.godot/imported/panel_list_row_plain.png-5ac286ecab6ddd22803be6e4eb3a6b60.ctex"]
 
 [params]
 

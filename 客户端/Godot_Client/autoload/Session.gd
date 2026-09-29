@@ -58,7 +58,9 @@ func receive(data: Dictionary) -> void:
 		"vote.start":
 			vote = data
 			Router.go(11)
-		"vote.update": vote["counts"] = data.counts
+		"vote.update":
+			vote["counts"] = data.counts
+			vote["voters"] = data.get("voters", [])
 		"game.start":
 			game = data
 			snap.clear()

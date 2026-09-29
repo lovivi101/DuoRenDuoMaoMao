@@ -90,6 +90,11 @@ func _build() -> void:
 	spectate_button.pressed.connect(_spectate)
 	spectate_button.visible = false
 	var menu: Button = _button("退出",Vector2(28,196),Vector2(96,44),Color("635980"))
+	for s: String in ["normal","hover","pressed"]:
+		menu.add_theme_stylebox_override(s,UiAssets.tex_style("button/button_secondary_dark",UiAssets.button(Color("635980")),Vector2(16,12),Vector2(12,4),Color(0.8,0.8,0.8) if s == "pressed" else Color.WHITE))
+	menu.add_theme_stylebox_override("focus",StyleBoxEmpty.new())
+	menu.add_theme_color_override("font_outline_color",Color("140e28"))
+	menu.add_theme_constant_override("outline_size",4)
 	menu.pressed.connect(func() -> void:
 		if Time.get_ticks_msec() < exit_armed_until:
 			Router.toast("已退出本局")
@@ -201,9 +206,11 @@ func _process(_delta: float) -> void:
 		_caption(item_buttons[i], _item_name(item) if not item.is_empty() else "")
 		item_buttons[i].disabled = item.is_empty()
 		var key: String = "item/"+("item-hunter-" if hunter else "item-hider-")+item.replace("_","-")
-		item_buttons[i].icon = UiAssets.asset(key)
+		item_buttons[i].icon = UiAssets.asset(key) if not item.is_empty() else null
 		item_buttons[i].expand_icon = true
-		item_buttons[i].add_theme_constant_override("icon_max_width",32)
+		item_buttons[i].icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		item_buttons[i].vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+		item_buttons[i].add_theme_constant_override("icon_max_width",50)
 	info_label.text = ""
 	if me.get("progress") is Dictionary:
 		info_label.text = {"repair":"修理发电机", "rescue":"解救队友", "accuse":"指认目标"}.get(me.progress.kind,"交互")+"  %d%%"%int(float(me.progress.value)*100)
@@ -414,14 +421,19 @@ func _draw() -> void:
 		draw_texture_rect(knob_tex,Rect2(joy+joystick*60-Vector2(34,34),Vector2(68,68)),false)
 	else:
 		draw_circle(joy+joystick*60,30,Color("a49bd8"))
-	draw_rect(Rect2(joy-Vector2(85,115),Vector2(170,12)),Color("28223f"))
-	draw_rect(Rect2(joy-Vector2(85,115),Vector2(170*float(Session.me().get("stamina",4))/4,12)),Color("689bcf"))
+	var stamina: float = clampf(float(Session.me().get("stamina",4))/4.0,0.0,1.0)
+	var bar: Rect2 = Rect2(joy-Vector2(85,122),Vector2(170,20))
+	draw_style_box(UiAssets.tex_style("hud/hud-stamina-frame",UiAssets.button(Color("28223f")),Vector2(12,8),Vector2.ZERO),bar)
+	if stamina > 0.02:
+		draw_style_box(UiAssets.tex_style("hud/hud-stamina-fill",UiAssets.button(Color("689bcf")),Vector2(10,5),Vector2.ZERO),Rect2(bar.position+Vector2(4,4),Vector2((bar.size.x-8)*stamina,bar.size.y-8)))
+	draw_string(font,bar.position+Vector2(0,-6),"体力 %d%%"%int(stamina*100),HORIZONTAL_ALIGNMENT_LEFT,-1,15,UiAssets.COLOR_TEXT)
 	var me: Dictionary = Session.me()
 	if me.get("progress") is Dictionary:
 		var center: Vector2 = main_button.position+main_button.size/2
 		draw_arc(center,70,-PI/2,-PI/2+TAU*float(me.progress.value),64,UiAssets.COLOR_GOLD,5)
 	var mini_rect: Rect2 = Rect2(1114,18,192,136)
-	draw_style_box(UiAssets.tex_style("hud/hud-minimap-frame",UiAssets.panel(),Vector2(24,24),Vector2.ZERO),mini_rect)
+	draw_style_box(UiAssets.tex_style("panel/panel_room_code_cell",UiAssets.panel(),Vector2(16,16),Vector2.ZERO),mini_rect)
+	draw_rect(mini_rect.grow(-7),Color(0.06,0.05,0.14,0.92))
 	if not world.map.is_empty():
 		var scale: Vector2 = Vector2(178.0/float(world.map.w),112.0/float(world.map.h))
 		var origin: Vector2 = mini_rect.position+Vector2(7,16)

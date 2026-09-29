@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://choco3suvyg4j"
-path="res://.godot/imported/role-hunter.png-b88a225eecd136df396cede5408d48c1.ctex"
+uid="uid://bfqcc0v6iv7wt"
+path="res://.godot/imported/07.png-2d3148a9daa95b88ebc89f0f83bce99c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/avatar/role-hunter.png"
-dest_files=["res://.godot/imported/role-hunter.png-b88a225eecd136df396cede5408d48c1.ctex"]
+source_file="res://docs/screenshots/07.png"
+dest_files=["res://.godot/imported/07.png-2d3148a9daa95b88ebc89f0f83bce99c.ctex"]
 
 [params]
 

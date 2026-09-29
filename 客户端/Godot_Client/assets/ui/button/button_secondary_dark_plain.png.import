@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ccdfkw3vxxdnc"
-path="res://.godot/imported/role-hider.png-4c93a828d853757bd94427cefcfc9bd8.ctex"
+uid="uid://opdjl8xu5vc4"
+path="res://.godot/imported/button_secondary_dark_plain.png-5ad4c8de35e7a027961c29e454379c5a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/avatar/role-hider.png"
-dest_files=["res://.godot/imported/role-hider.png-4c93a828d853757bd94427cefcfc9bd8.ctex"]
+source_file="res://assets/ui/button/button_secondary_dark_plain.png"
+dest_files=["res://.godot/imported/button_secondary_dark_plain.png-5ad4c8de35e7a027961c29e454379c5a.ctex"]
 
 [params]
 

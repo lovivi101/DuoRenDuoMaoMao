@@ -189,10 +189,10 @@ func _build_page(page: int) -> void:
 # ---------------------------------------------------------------- 01 启动闪屏
 
 func _build_splash() -> void:
-	var logo: TextureRect = UiAssets.picture("logo/game_logo_title", Vector2(357, 90), Vector2(620, 300))
+	var logo: TextureRect = UiAssets.picture("logo/game_logo_title", Vector2(40, 36), Vector2(560, 270))
 	if logo.texture: active_page.add_child(logo)
-	else: _add(_title_label("熄灯", Vector2(0, 175), Vector2(1334, 110), 96, UiAssets.COLOR_GOLD, true))
-	_add(_label("当灯光熄灭，另一场游戏开始。", Vector2(0, 405), Vector2(1334, 40), 24, UiAssets.COLOR_TEXT, true))
+	else: _add(_title_label("熄灯", Vector2(60, 90), Vector2(460, 120), 96, UiAssets.COLOR_GOLD))
+	_add(_label("当灯光熄灭，另一场游戏开始。", Vector2(70, 300), Vector2(520, 40), 24, UiAssets.COLOR_TEXT))
 	_add(_progress(Vector2(417, 600), Vector2(500, 26), 0.68))
 	_add(_label("正在更新资源… 68%", Vector2(0, 634), Vector2(1334, 30), FS_SMALL, UiAssets.COLOR_MUTED, true))
 	_add(_label("v" + Config.VERSION, Vector2(1200, 700), Vector2(110, 26), 14, UiAssets.COLOR_MUTED))
@@ -207,7 +207,7 @@ func _leave_splash() -> void:
 func _show_notice() -> void:
 	if notice.is_empty() or not is_instance_valid(active_page) or active_page.find_child("Notice", true, false):
 		return
-	var modal: Panel = _panel(Vector2(870, 90) if Router.current == 1 else Vector2(417, 170), Vector2(420, 330), "panel/panel_modal")
+	var modal: Panel = _panel(Vector2(860, 110) if Router.current == 1 else Vector2(417, 170), Vector2(420, 330), "panel/panel_modal")
 	modal.name = "Notice"
 	_add(modal)
 	modal.add_child(_title_label(str(notice.get("title", "公告")), Vector2(0, 28), Vector2(420, 50), 30, UiAssets.COLOR_GOLD, true))
@@ -404,8 +404,7 @@ func _random_name() -> void:
 func _build_profile() -> void:
 	_header("创建角色", 2)
 	var color: String = str(Session.user.get("color", "blue"))
-	var stage: TextureRect = UiAssets.picture("decor/decor-ripple-ring", Vector2(110, 520), Vector2(400, 120), Color(1, 0.8, 0.4, 0.55))
-	if stage.texture: active_page.add_child(stage)
+	_add(_floor_glow(Vector2(302, 482), Vector2(420, 100)))
 	_add(_sprite_figure(color, Vector2(160, 170), 380))
 	var panel: Panel = _panel(Vector2(640, 110), Vector2(650, 590))
 	_add(panel)
@@ -449,14 +448,17 @@ func _build_lobby() -> void:
 	card.add_child(_avatar(user, Vector2(12, 10), 76))
 	card.add_child(_label(str(user.get("nickname", "游客")), Vector2(98, 12), Vector2(220, 32), 22, UiAssets.COLOR_TEXT))
 	card.add_child(_label("Lv.%d" % int(user.get("level", 1)), Vector2(98, 46), Vector2(70, 24), FS_SMALL, UiAssets.COLOR_GOLD))
-	card.add_child(_progress(Vector2(166, 50), Vector2(140, 16), float(int(user.get("exp", 0)) % 100) / 100.0))
+	card.add_child(_progress(Vector2(160, 48), Vector2(150, 22), float(int(user.get("exp", 0)) % 100) / 100.0))
 	# Top-centre currencies, top-right settings.
-	_add(_resource_chip("icon/coin-icon", str(user.get("coins", 0)), Vector2(470, 30)))
-	_add(_resource_chip("icon/gem-icon", str(user.get("gems", 0)), Vector2(690, 30)))
+	for i: int in 2:
+		var chip: Control = _resource_chip(["icon/coin-icon", "icon/gem-icon"][i], str(user.get(["coins", "gems"][i], 0)), Vector2(470 + i * 230, 30), Vector2(210, 60))
+		chip.add_child(UiAssets.picture("icon/plus-icon", Vector2(168, 16), Vector2(28, 28)))
+		_add(chip)
 	var setting: Button = _icon_button("icon/settings-icon", Vector2(1216, 24), Vector2(84, 84), Color("2c2552"))
 	setting.pressed.connect(func() -> void: Router.go(19))
 	_add(setting)
 	# Centre: the player's own hider on the dorm floor.
+	_add(_floor_glow(Vector2(590, 502), Vector2(460, 110)))
 	_add(_sprite_figure(str(user.get("color", "blue")), Vector2(440, 170), 400))
 	# Right: primary actions, largest first.
 	var quick: Button = _button("快速匹配  ▶", Vector2(920, 190), Vector2(380, 120), UiAssets.COLOR_GOLD, 40)
@@ -518,7 +520,7 @@ func _build_create_room() -> void:
 	_header("创建房间", 6)
 	var map_panel: Panel = _panel(Vector2(90, 120), Vector2(420, 540))
 	_add(map_panel)
-	map_panel.add_child(_label("选择地图", Vector2(56, 28), Vector2(300, 32), 24, UiAssets.COLOR_GOLD))
+	_section_title(map_panel, "选择地图", "icon/map-icon")
 	var info: Dictionary = MAP_INFO["old_dorm"]
 	var frame: Panel = _panel(Vector2(34, 80), Vector2(352, 220), "button/card_map_frame")
 	map_panel.add_child(frame)
@@ -529,7 +531,7 @@ func _build_create_room() -> void:
 
 	var panel: Panel = _panel(Vector2(530, 120), Vector2(714, 540))
 	_add(panel)
-	panel.add_child(_label("房间设置", Vector2(56, 28), Vector2(300, 32), 24, UiAssets.COLOR_GOLD))
+	_section_title(panel, "房间设置", "icon/settings-icon")
 	var durations: Array = [300, 480, 600]
 	panel.add_child(_label("对局时长", Vector2(40, 90), Vector2(170, 52), FS_BODY, UiAssets.COLOR_TEXT))
 	panel.add_child(_tabs(["5 分钟", "8 分钟", "10 分钟"], durations.find(int(room_settings.durationSec)), Vector2(220, 86), Vector2(450, 58), func(i: int) -> void:
@@ -564,12 +566,12 @@ func _build_join_room() -> void:
 	panel.add_child(_label("好友分享的房间码，或点「粘贴」", Vector2(0, 74), Vector2(620, 26), FS_SMALL, UiAssets.COLOR_MUTED, true))
 	code_cells.clear()
 	for i: int in 6:
-		var cell: Panel = _panel(Vector2(46 + i * 76, 116), Vector2(66, 82), "panel/panel_room_code_cell")
-		var digit: Label = _title_label("", Vector2(0, 10), Vector2(66, 60), 44, UiAssets.COLOR_TEXT, true)
+		var cell: Panel = _panel(Vector2(46 + i * 70, 116), Vector2(62, 82), "panel/panel_room_code_cell")
+		var digit: Label = _title_label("", Vector2(0, 10), Vector2(62, 60), 44, UiAssets.COLOR_TEXT, true)
 		cell.add_child(digit)
 		code_cells.append(digit)
 		panel.add_child(cell)
-	var paste: Button = _button("粘贴", Vector2(506, 124), Vector2(78, 66), Color("38345e"), 20)
+	var paste: Button = _button("粘贴", Vector2(470, 120), Vector2(104, 74), Color("38345e"), 20, "icon/copy-icon")
 	paste.pressed.connect(func() -> void:
 		var text: String = DisplayServer.clipboard_get().strip_edges()
 		var digits: String = ""
@@ -615,10 +617,10 @@ func _build_waiting() -> void:
 	_add(chip)
 	chip.add_child(_label("房间码", Vector2(20, 0), Vector2(90, 64), FS_SMALL, UiAssets.COLOR_MUTED))
 	chip.add_child(_title_label(code, Vector2(100, 4), Vector2(210, 56), 36, UiAssets.COLOR_GOLD))
-	var copy: Button = _button("复制", Vector2(1104, 30), Vector2(96, 56), Color("38345e"), 18, "icon/copy-icon")
+	var copy: Button = _button("复制", Vector2(1100, 28), Vector2(100, 62), Color("38345e"), 20, "icon/copy-icon")
 	copy.pressed.connect(func() -> void: DisplayServer.clipboard_set(code); show_toast("房间码已复制"))
 	_add(copy)
-	var share: Button = _button("分享", Vector2(1208, 30), Vector2(96, 56), Color("38345e"), 18, "icon/share-icon")
+	var share: Button = _button("分享", Vector2(1208, 28), Vector2(100, 62), Color("38345e"), 20, "icon/share-icon")
 	share.pressed.connect(func() -> void: DisplayServer.clipboard_set("来《熄灯》一起躲猫猫！房间码 %s" % code); show_toast("邀请文字已复制"))
 	_add(share)
 
@@ -637,11 +639,18 @@ func _build_waiting() -> void:
 		var name: String = str(p.get("nickname", "玩家")).left(7)
 		card.add_child(_label(name, Vector2(0, 120), Vector2(190, 30), FS_BODY, UiAssets.COLOR_TEXT, true))
 		if p.get("isHost", false):
-			card.add_child(UiAssets.picture("icon/crown-icon", Vector2(12, 10), Vector2(40, 40)))
+			var host_tag: Panel = _panel(Vector2(10, 10), Vector2(86, 34), "button/tab_active")
+			host_tag.add_child(UiAssets.picture("icon/crown-icon", Vector2(8, 4), Vector2(26, 26)))
+			var host_text: Label = _label("房主", Vector2(36, 0), Vector2(46, 34), 16, UiAssets.COLOR_DARK_TEXT)
+			host_text.add_theme_constant_override("outline_size", 0)
+			host_tag.add_child(host_text)
+			card.add_child(host_tag)
 		var ready: bool = bool(p.get("ready", false))
 		card.add_child(_label("✓ 已准备" if ready else "等待中", Vector2(0, 152), Vector2(190, 26), 18, UiAssets.COLOR_GREEN if ready else UiAssets.COLOR_MUTED, true))
 		if Session.is_host() and p.get("isBot", false):
-			var kick: Button = _icon_button("icon/close-icon", Vector2(142, 8), Vector2(40, 40), UiAssets.COLOR_RED)
+			var kick: Button = _icon_button("icon/close-icon", Vector2(146, 10), Vector2(34, 34), Color("38345e"))
+			for state: String in ["normal", "hover", "pressed"]:
+				kick.add_theme_stylebox_override(state, UiAssets.tex_style("button/button_round_icon", UiAssets.button(Color("38345e")), Vector2(12, 12), Vector2(4, 4), Color(1.2, 1.2, 1.2) if state == "hover" else Color.WHITE))
 			kick.tooltip_text = "踢出"
 			kick.pressed.connect(func() -> void: Net.send("room.kick", {"playerId": str(p.get("id", ""))}))
 			card.add_child(kick)
@@ -679,32 +688,65 @@ func _build_waiting() -> void:
 
 func _build_vote() -> void:
 	_add(_title_label("地图投票", Vector2(0, 30), Vector2(1334, 64), 52, UiAssets.COLOR_GOLD, true))
-	_add(_label("不同的夜晚，不同的故事 · 票数最高的地图将被选中", Vector2(0, 112), Vector2(1334, 28), 18, UiAssets.COLOR_TEXT, true))
+	_add(_label("不同的夜晚，不同的故事。这一次，你会去哪？", Vector2(0, 112), Vector2(1334, 28), 18, UiAssets.COLOR_TEXT, true))
 	var ring: Panel = _panel(Vector2(1160, 24), Vector2(130, 110), "panel/panel_room_code_cell")
 	_add(ring)
 	var timer: Label = _title_label("10s", Vector2(0, 20), Vector2(130, 70), 46, UiAssets.COLOR_GOLD, true)
 	timer.name = "Timer"
 	ring.add_child(timer)
 	countdown = maxf(0, (float(Session.vote.get("endsAt", 0)) - Net.now_ms()) / 1000.0)
-	var maps: Array = Session.vote.get("maps", ["old_dorm", "old_dorm", "old_dorm"])
+	var maps: Array = Session.vote.get("maps", ["old_dorm", "night_hospital", "night_mall"])
+	var available: Array = Session.vote.get("available", ["old_dorm"])
 	var counts: Dictionary = Session.vote.get("counts", {})
 	for i: int in maps.size():
 		var id: String = str(maps[i])
 		var info: Dictionary = MAP_INFO.get(id, MAP_INFO.old_dorm)
-		var chosen: bool = i == my_vote
-		var card: Button = _card_button(Vector2(72 + i * 406, 170), Vector2(378, 400), chosen)
-		card.add_child(UiAssets.picture("mapcard/" + str(info.card), Vector2(18, 18), Vector2(342, 200)))
-		card.add_child(_title_label(str(info.name), Vector2(0, 232), Vector2(378, 50), 36, UiAssets.COLOR_DARK_TEXT if chosen else UiAssets.COLOR_TEXT, not chosen))
-		card.add_child(_label(str(info.desc), Vector2(0, 284), Vector2(378, 26), 18, UiAssets.COLOR_DARK_TEXT if chosen else UiAssets.COLOR_MUTED, not chosen))
-		card.add_child(_title_label("%d 票" % int(counts.get(id, 0)), Vector2(0, 320), Vector2(378, 56), 44, UiAssets.COLOR_DARK_TEXT if chosen else UiAssets.COLOR_GOLD, not chosen))
+		var open: bool = id in available
+		var chosen: bool = i == my_vote and open
+		var card: Button = _card_button(Vector2(72 + i * 406, 150), Vector2(378, 340), chosen)
+		var picture: TextureRect = UiAssets.picture("mapcard/" + str(info.card), Vector2(16, 16), Vector2(346, 186))
+		card.add_child(picture)
+		var text_color: Color = UiAssets.COLOR_DARK_TEXT if chosen else UiAssets.COLOR_TEXT
+		card.add_child(_title_label(str(info.name), Vector2(0, 208), Vector2(378, 50), 36, text_color, true))
+		card.add_child(_label(str(info.desc), Vector2(0, 256), Vector2(378, 24), 17, UiAssets.COLOR_DARK_TEXT if chosen else UiAssets.COLOR_MUTED, true))
+		if open:
+			card.add_child(_title_label("%d 票" % int(counts.get(id, 0)), Vector2(0, 280), Vector2(378, 52), 40, UiAssets.COLOR_DARK_TEXT if chosen else UiAssets.COLOR_GOLD, true))
+			card.pressed.connect(func() -> void:
+				my_vote = i
+				Net.send("vote.cast", {"mapId": id})
+				show_page(11))
+		else:
+			# Maps from the design doc that are not built yet: shown, but not votable.
+			picture.modulate = Color(0.45, 0.45, 0.55)
+			card.add_child(UiAssets.picture("icon/lock-icon", Vector2(159, 74), Vector2(60, 60)))
+			card.add_child(_label("即将开放", Vector2(0, 286), Vector2(378, 40), 22, UiAssets.COLOR_MUTED, true))
+			card.disabled = true
+			card.modulate = Color(0.85, 0.85, 0.9)
 		if chosen:
-			card.add_child(UiAssets.picture("icon/check-icon", Vector2(318, 6), Vector2(54, 54)))
-		card.pressed.connect(func() -> void:
-			my_vote = i
-			Net.send("vote.cast", {"mapId": id})
-			show_page(11))
+			var tag: Panel = _panel(Vector2(16, 16), Vector2(116, 36), "button/tab_active")
+			var tag_text: Label = _label("当前选择", Vector2(0, 0), Vector2(116, 36), 17, UiAssets.COLOR_DARK_TEXT, true)
+			tag_text.add_theme_constant_override("outline_size", 0)
+			tag.add_child(tag_text)
+			card.add_child(tag)
 		_add(card)
-	_add(_label("点击地图卡投票，可以改票", Vector2(0, 590), Vector2(1334, 30), FS_BODY, UiAssets.COLOR_TEXT, true))
+	# Who has voted: the room's players with a badge once their vote is in.
+	var players: Array = Session.room.get("players", [])
+	var voters: Array = Session.vote.get("voters", [])
+	var shown: int = mini(players.size(), 12)
+	var x0: float = (1334.0 - shown * 92.0 + 12.0) / 2.0
+	for i: int in shown:
+		var p: Dictionary = players[i]
+		var slot: Panel = _panel(Vector2(x0 + i * 92, 510), Vector2(80, 96), "panel/panel_room_code_cell")
+		slot.add_child(_avatar(p, Vector2(6, 6), 68))
+		slot.add_child(_label(str(p.get("nickname", "玩家")).left(4), Vector2(0, 72), Vector2(80, 22), 13, UiAssets.COLOR_TEXT, true))
+		if str(p.get("id", "")) in voters:
+			var badge: Panel = _panel(Vector2(34, -12), Vector2(56, 26), "button/tab_active")
+			var badge_text: Label = _label("投了!", Vector2(0, 0), Vector2(56, 26), 13, UiAssets.COLOR_DARK_TEXT, true)
+			badge_text.add_theme_constant_override("outline_size", 0)
+			badge.add_child(badge_text)
+			slot.add_child(badge)
+		_add(slot)
+	_add(_label("点击地图卡投票，可以改票 · 票数最高的地图将被选中", Vector2(0, 640), Vector2(1334, 30), FS_BODY, UiAssets.COLOR_TEXT, true))
 
 # ---------------------------------------------------------------- 12 角色分配
 
@@ -854,7 +896,7 @@ func _build_friends() -> void:
 	var add: Button = _button("添加好友", Vector2(604, 26), Vector2(186, 64), UiAssets.COLOR_GOLD, 22, "icon/add-friend-icon")
 	add.pressed.connect(func() -> void: _add_friend(search.text.strip_edges()))
 	panel.add_child(add)
-	var title: Label = _label("好友列表", Vector2(34, 102), Vector2(400, 30), 22, UiAssets.COLOR_GOLD)
+	var title: Label = _label("好友列表", Vector2(34, 102), Vector2(400, 30), 24, UiAssets.COLOR_GOLD)
 	title.name = "FriendTitle"
 	panel.add_child(title)
 	var list: VBoxContainer = VBoxContainer.new()
@@ -868,7 +910,7 @@ func _build_friends() -> void:
 	# Right: my room code and share buttons.
 	var room: Panel = _panel(Vector2(880, 110), Vector2(414, 610))
 	_add(room)
-	room.add_child(_label("我的房间", Vector2(56, 26), Vector2(300, 32), 24, UiAssets.COLOR_GOLD))
+	_section_title(room, "我的房间", "icon/invite-icon")
 	var code: String = str(Session.room.get("code", ""))
 	var code_box: Panel = _panel(Vector2(30, 76), Vector2(354, 110), "panel/panel_room_code_cell")
 	room.add_child(code_box)
@@ -935,12 +977,12 @@ func _add_friend(short_id: String) -> void:
 
 func _build_settings() -> void:
 	_header("设置", 6)
-	var columns: Array = [["声音与辅助", 40.0], ["画面与操作", 468.0], ["账号与安全", 896.0]]
+	var columns: Array = [["声音与辅助", 40.0, "icon/sound-on-icon"], ["画面与操作", 468.0, "icon/vibration-icon"], ["账号与安全", 896.0, "icon/user-icon"]]
 	var panels: Array[Panel] = []
 	for c: Array in columns:
 		var p: Panel = _panel(Vector2(float(c[1]), 110), Vector2(398, 560))
 		_add(p)
-		p.add_child(_label(str(c[0]), Vector2(56, 26), Vector2(300, 32), 24, UiAssets.COLOR_GOLD))
+		_section_title(p, str(c[0]), str(c[2]))
 		panels.append(p)
 	# Column 1: sound and accessibility.
 	var sound: Panel = panels[0]
@@ -1085,7 +1127,7 @@ func _card_button(pos: Vector2, size: Vector2, chosen: bool) -> Button:
 	b.position = pos
 	b.size = size
 	var tint: Color = Color(1.35, 1.1, 0.45) if chosen else Color.WHITE
-	for state: String in ["normal", "hover", "pressed"]:
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
 		var t: Color = tint * (Color(1.12, 1.12, 1.12) if state == "hover" else (Color(0.85, 0.85, 0.85) if state == "pressed" else Color.WHITE))
 		b.add_theme_stylebox_override(state, UiAssets.tex_style("panel/panel_player_card", UiAssets.panel(), Vector2(26, 26), Vector2(8, 8), t))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
@@ -1141,9 +1183,9 @@ func _edit(placeholder: String, pos: Vector2, size: Vector2) -> LineEdit:
 	e.position = pos
 	e.size = size
 	e.add_theme_font_size_override("font_size", 22)
-	var style: StyleBox = UiAssets.tex_style("panel/panel_input_field", UiAssets.button(Color("3e376a")), Vector2(28, 20), Vector2(46, 8))
+	var style: StyleBox = UiAssets.tex_style("panel/panel_input_field", UiAssets.button(Color("3e376a")), Vector2(28, 20), Vector2(24, 8))
 	e.add_theme_stylebox_override("normal", style)
-	e.add_theme_stylebox_override("focus", UiAssets.tex_style("panel/panel_input_field", UiAssets.button(Color("5a4f95")), Vector2(28, 20), Vector2(46, 8), Color(1.15, 1.1, 1.3)))
+	e.add_theme_stylebox_override("focus", UiAssets.tex_style("panel/panel_input_field", UiAssets.button(Color("5a4f95")), Vector2(28, 20), Vector2(24, 8), Color(1.15, 1.1, 1.3)))
 	return e
 
 func _field_icon(icon: String, pos: Vector2) -> TextureRect:
@@ -1235,10 +1277,42 @@ func _resource_chip(icon: String, text: String, pos: Vector2, size: Vector2 = Ve
 
 ## Full-body hider (white pyjama art tinted with the player colour) at `height` px tall.
 func _sprite_figure(color: String, pos: Vector2, height: float) -> TextureRect:
-	var figure: TextureRect = UiAssets.picture("sprite/sprite-hider", pos, Vector2(height * 0.75, height), UiAssets.player_color(color).lightened(0.25))
+	# The 128x192 sprite is drawn at a whole-number scale so every art pixel stays square.
+	var px_scale: float = maxf(1.0, roundf(height / 192.0))
+	var box: Vector2 = Vector2(128, 192) * px_scale
+	pos += (Vector2(height * 0.75, height) - box) * Vector2(0.5, 1.0)
+	var figure: TextureRect = UiAssets.picture("sprite/sprite-hider", pos, box, UiAssets.player_color(color).lightened(0.25))
 	# Pixel art: scale with nearest filtering so the enlarged figure stays crisp.
 	figure.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	return figure
+
+## Warm elliptical spotlight on the floor under a standing figure (05 / 06).
+func _floor_glow(center: Vector2, size: Vector2) -> TextureRect:
+	var gradient: Gradient = Gradient.new()
+	gradient.set_color(0, Color(1.0, 0.8, 0.35, 0.55))
+	gradient.set_color(1, Color(1.0, 0.8, 0.35, 0.0))
+	var tex: GradientTexture2D = GradientTexture2D.new()
+	tex.gradient = gradient
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = 256
+	tex.height = 64
+	var rect: TextureRect = TextureRect.new()
+	rect.texture = tex
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.position = center - size / 2
+	rect.size = size
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
+
+## Section title inside a panel: small icon + gold caption at the panel's top-left.
+func _section_title(parent: Control, text: String, icon: String = "") -> void:
+	var x: float = 32.0
+	if not icon.is_empty() and UiAssets.asset(icon):
+		parent.add_child(UiAssets.picture(icon, Vector2(30, 26), Vector2(30, 30)))
+		x = 70.0
+	parent.add_child(_label(text, Vector2(x, 24), Vector2(320, 34), 24, UiAssets.COLOR_GOLD))
 
 ## A texture resized to `px` square (theme icons ignore control size).
 func _scaled_icon(filename: String, px: int) -> Texture2D:
@@ -1304,7 +1378,11 @@ func prepare_debug_shot(name: String) -> void:
 		players.append({"id":"demo" if i == 0 else "bot_%d" % i, "nickname":"小夜猫" if i == 0 else "AI-%d" % i, "color":UiAssets.HIDER_COLORS[(i + 5) % 8], "ready":i != 0, "isHost":i == 0, "isBot":i != 0})
 	Session.room = {"code":"483921", "hostId":"demo", "players":players, "phase":"waiting", "settings":room_settings}
 	Session.match_status = {"elapsedSec":65, "found":8, "needed":12, "canAiFill":true}
-	Session.vote = {"maps":["old_dorm","old_dorm","old_dorm"], "counts":{"old_dorm":5}, "endsAt":Net.now_ms() + 8000}
+	Session.vote = {"maps":["old_dorm","night_hospital","night_mall"], "available":["old_dorm"], "counts":{"old_dorm":5}, "voters":["bot_1","bot_2","bot_3","bot_5","bot_6"], "endsAt":Net.now_ms() + 8000}
+	join_code = "6281"
+	if page == 1:
+		notice = {"title":"宿舍公告", "body":"欢迎来到熄灯！
+躲好，今晚一起开局！"}
 	Session.game = {"you":{"id":"demo", "role":"hunter" if page == 14 else "hider"}}
 	if page in [13, 14, 16]:
 		var bytes: PackedByteArray = PackedByteArray()

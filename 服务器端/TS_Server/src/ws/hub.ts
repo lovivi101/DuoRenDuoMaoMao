@@ -8,6 +8,8 @@ import {action,ghostSide,mark,rewardsFor,setInput,setOnline,snapshotFor,tickGame
 import {wireMap} from '../game/maps/old_dorm.js';
 import {visible} from '../game/vision.js';
 import {CONFIG} from '../game/config.js';
+// The vote shows the design doc's first three maps; only the implemented one can be picked.
+const VOTE_MAPS={maps:['old_dorm','night_hospital','night_mall'],available:['old_dorm']};
 export class Hub {
  wss=new WebSocketServer({noServer:true,maxPayload:16384});
  sockets=new Map<string,WebSocket>();lobby:Lobby;private timer?:NodeJS.Timeout;private lastStatus=0;
@@ -29,7 +31,7 @@ export class Hub {
  broadcast(r:Room,m:unknown){for(const p of r.players)this.send(p.id,m)}
  state(r:Room){const m={t:'room.state',code:r.code,hostId:r.hostId,settings:r.settings,phase:r.phase,players:r.players.map(p=>({...p,isHost:p.id===r.hostId}))};this.broadcast(r,m);return m}
  private player(u:User):Player{return {id:u.id,nickname:u.nickname,color:u.color,ready:false,isBot:false,isHost:false,online:true}}
- private vote(r:Room){this.state(r);this.broadcast(r,{t:'vote.start',maps:['old_dorm','old_dorm','old_dorm'],endsAt:r.voteEndsAt})}
+ private vote(r:Room){this.state(r);this.broadcast(r,{t:'vote.start',...VOTE_MAPS,endsAt:r.voteEndsAt})}
  private startFor(r:Room,id:string){
  const g=r.game;if(!g)return;const p=g.players.find(p=>p.id===id);if(!p)return;
  const allies=p.role==='hunter'||p.role==='mole'?g.players.filter(q=>q.id!==id&&(q.role==='hunter'||q.role==='mole')).map(q=>({id:q.id,role:q.role})):[];
@@ -47,7 +49,7 @@ export class Hub {
  this.disconnected.delete(u.id);
  if(r){const p=r.players.find(p=>p.id===u.id);if(p)p.online=true;if(g)setOnline(g,u.id,true)}
  this.send(u.id,{t:'hello',user:safeUser(u),serverNow:this.clock(),...(r&&within?{reconnect:{roomCode:r.code}}:{})});
- if(r){this.state(r);if(g)this.startFor(r,u.id);else if(r.phase==='voting')this.send(u.id,{t:'vote.start',maps:['old_dorm','old_dorm','old_dorm'],endsAt:r.voteEndsAt})}
+ if(r){this.state(r);if(g)this.startFor(r,u.id);else if(r.phase==='voting')this.send(u.id,{t:'vote.start',...VOTE_MAPS,endsAt:r.voteEndsAt})}
  let lastSecond=this.clock(),count=0,pongAt=this.clock();
  ws.on('pong',()=>{pongAt=this.clock()});
  const heartbeat=setInterval(()=>{if(this.clock()-pongAt>30000){ws.terminate();return}ws.ping()},10000);heartbeat.unref();
@@ -92,7 +94,7 @@ export class Hub {
  if(!this.store.friends(id).some(f=>f.id===m.friendId))throw Error('NOT_FRIEND');
  if(!this.sockets.has(String(m.friendId)))throw Error('FRIEND_OFFLINE');this.send(String(m.friendId),{t:'invite',from:safeUser(user),code:r.code});return;
  }
- if(m.t==='vote.cast'){if(r.phase!=='voting'||m.mapId!=='old_dorm')throw Error('BAD_VOTE');r.votes.set(id,'old_dorm');this.broadcast(r,{t:'vote.update',counts:{old_dorm:r.votes.size}});return}
+ if(m.t==='vote.cast'){if(r.phase!=='voting'||m.mapId!=='old_dorm')throw Error('BAD_VOTE');r.votes.set(id,'old_dorm');this.broadcast(r,{t:'vote.update',counts:{old_dorm:r.votes.size},voters:[...r.votes.keys()]});return}
  if(m.t==='room.again'){
  // A caller can request a rematch during the result screen. Reset the shared
  // room immediately so all clients receive the waiting state and can ready up.

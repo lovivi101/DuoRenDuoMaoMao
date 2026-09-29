@@ -96,7 +96,11 @@ static func used_rect(filename: String) -> Rect2:
 
 ## Nine-patch StyleBoxTexture over the art's opaque bounds; falls back to a flat style
 ## when the art is missing. `margin` is the stretch border in texture pixels.
+## Frames with baked corner ornaments have an ornament-free "*_plain" twin (made by
+## 素材/拆分/tools/make_plain_frames.py) so stretching never smears sparkles under text.
 static func tex_style(filename: String, fallback: StyleBox, margin: Vector2 = Vector2(22, 14), content: Vector2 = Vector2(18, 6), tint: Color = Color.WHITE) -> StyleBox:
+	if asset(filename + "_plain") != null:
+		filename += "_plain"
 	var tex: Texture2D = asset(filename)
 	if tex == null:
 		return fallback
