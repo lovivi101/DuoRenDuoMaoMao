@@ -172,6 +172,7 @@ export function snapshotFor(g:GameState,id:string){
  const isMarked=(q:GamePlayer)=>marks.some(m=>m.targetId===q.id&&(m.kind==='report'||m.kind==='wraith'));
  const players=g.players.filter(q=>q.id!==id&&!(q.state==='ghost'&&p.role==='hunter')&&(visible(g,p,q)||isMarked(q)));
  return {t:'game.snap',tick:g.tick,now:g.now,timeLeftSec:Math.max(0,(g.phaseEndsAt-g.now)/1000),
+ roster:g.players.filter(q=>q.role!=='hunter').map(q=>({color:q.color,caught:!living(q)})),nextEventAt:g.nextEventAt,
  alive:g.players.filter(q=>q.role==='hider'&&living(q)).length,totalHiders:g.players.filter(q=>q.role==='hider').length,caughtByMe:p.captures,
  you:{x:p.x,y:p.y,dir:p.dir,state:p.state,stamina:p.stamina,items:p.items,prop:p.prop,flashlight:p.flashlight,visionRadius:visionRadius(g,p),ghostSide:p.ghostSide,caged:p.caged,rescued:p.rescued,ghostChoiceEndsAt:p.chooseUntil,ackSeq:p.input.seq,cooldowns:{ghostSkill:Math.max(0,(p.ghostReadyAt-g.now)/1000),report:Math.max(0,(p.reportReadyAt-g.now)/1000)},progress:p.interact?{kind:p.interact.kind,value:p.interact.value}:null},
  players:players.map(q=>({id:q.id,x:q.x,y:q.y,dir:q.dir,state:q.state,prop:q.state==='disguised'?q.prop:null,running:q.running})),

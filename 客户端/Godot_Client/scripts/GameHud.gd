@@ -32,6 +32,9 @@ var aim_origin: Vector2 = Vector2.ZERO
 var aim_direction: Vector2 = Vector2.RIGHT
 var explored: Dictionary = {}
 var exit_armed_until: int = 0
+# "下次事件 Ns" chip left of the minimap, hidden while an event banner is showing.
+var next_event_label: Label
+const NEXT_EVENT_RECT: Rect2 = Rect2(868,22,230,64)
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -67,6 +70,7 @@ func _build() -> void:
 	event_label.add_theme_color_override("font_outline_color",Color("3a0610"))
 	event_label.add_theme_constant_override("outline_size",6)
 	state_label = _label("",Vector2(30,118),Vector2(450,46),18)
+	next_event_label = _label("",NEXT_EVENT_RECT.position+Vector2(18,6),Vector2(196,30),18)
 	info_label = _label("",Vector2(335,655),Vector2(660,56),17)
 	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	main_button = _button("交互\nSpace",mirror(Vector2(1160,565),Vector2(125,125)),Vector2(125,125),UiAssets.COLOR_GOLD)
@@ -181,7 +185,11 @@ func _process(_delta: float) -> void:
 	var final: bool = Session.phase == "final"
 	timer_label.add_theme_color_override("font_color",UiAssets.COLOR_RED if final else UiAssets.COLOR_TEXT)
 	timer_label.add_theme_font_size_override("font_size",48 if final else 40)
-	alive_button.text = "存活 %d / %d"%[int(Session.snap.get("alive",0)),int(Session.snap.get("totalHiders",0))]
+	var roster: Array = Session.snap.get("roster",[])
+	if roster.is_empty():
+		alive_button.text = "存活 %d / %d"%[int(Session.snap.get("alive",0)),int(Session.snap.get("totalHiders",0))]
+	else:
+		alive_button.text = "存活 %d / %d"%[roster.filter(func(r: Dictionary) -> bool: return not r.get("caught",false)).size(),roster.size()]
 	state_label.text = "已抓 %d 人 · 手电 %s"%[int(Session.snap.get("caughtByMe",0)),"开" if me.get("flashlight",true) else "关"] if hunter else ("幽灵 · " + ("怨灵" if me.get("ghostSide") == "wraith" else "守护灵") if ghost else "藏者 · 轻推走路 / 外圈奔跑")
 	_caption(main_button, "拍打\nSpace" if hunter else "交互\nSpace")
 	main_button.visible = not ghost
@@ -224,6 +232,9 @@ func _process(_delta: float) -> void:
 		var names: Dictionary = {"blackout":"全楼停电","emergency_light":"应急灯","adrenaline":"肾上腺素","broadcast":"广播点名"}
 		var seconds: int = maxi(0,ceili((float(event.get("at",Net.now_ms()))-Net.now_ms())/1000))
 		event_label.text = str(names.get(event.get("kind"),"事件"))+("  %ds"%seconds if event.get("stage") == "warn" else "  生效中")
+	var next_at: float = float(Session.snap.get("nextEventAt",0))
+	next_event_label.visible = event_label.text.is_empty() and next_at > Net.now_ms() and Session.phase in ["hunt","final"]
+	next_event_label.text = "下次事件  %ds"%ceili((next_at-Net.now_ms())/1000.0)
 	var keyboard: Vector2 = Vector2(float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A)),float(Input.is_physical_key_pressed(KEY_S))-float(Input.is_physical_key_pressed(KEY_W)))
 	world.direction = joystick if joystick_id != -99 else keyboard.normalized()
 	if Config.autoplay:
@@ -396,18 +407,30 @@ func _draw() -> void:
 	if not event_label.text.is_empty():
 		draw_style_box(UiAssets.tex_style("event/event-warning-banner",UiAssets.button(UiAssets.COLOR_RED),Vector2(24,12),Vector2.ZERO),Rect2(event_label.position-Vector2(10,4),event_label.size+Vector2(20,8)))
 	# Survivor row: a dot per hider, skulls for the caught ones.
-	var total: int = int(Session.snap.get("totalHiders",0))
-	var alive: int = int(Session.snap.get("alive",0))
 	var skull: Texture2D = UiAssets.asset("icon/skull-icon")
-	for i: int in mini(total,10):
-		var at: Vector2 = alive_button.position+Vector2(112+i*22,64)
-		if i < alive:
-			draw_circle(at,8,UiAssets.COLORS[i%8])
-			draw_arc(at,8,0,TAU,20,Color("140e28"),2)
-		elif skull:
-			draw_texture_rect(skull,Rect2(at-Vector2(9,9),Vector2(18,18)),false)
-		else:
-			draw_circle(at,10,Color(0.4,0.4,0.45))
+	var roster: Array = (Session.snap.get("roster",[]) as Array).duplicate()
+	if roster.is_empty():
+		for i: int in int(Session.snap.get("totalHiders",0)):
+			roster.append({"color":UiAssets.HIDER_COLORS[i%8],"caught":i >= int(Session.snap.get("alive",0))})
+	var shown: int = mini(roster.size(),12)
+	var step: float = minf(24.0,212.0/maxf(1.0,float(shown)))
+	for i: int in shown:
+		var at: Vector2 = alive_button.position+Vector2(112+i*step,62)
+		var r: Dictionary = roster[i]
+		if r.get("caught",false):
+			if skull: draw_texture_rect(skull,Rect2(at-Vector2(10,10),Vector2(20,20)),false,Color(0.8,0.8,0.85))
+			else: draw_circle(at,10,Color(0.4,0.4,0.45))
+			continue
+		var face: Texture2D = UiAssets.asset("avatar/avatar-hider-"+str(r.get("color","blue")))
+		if face: draw_texture_rect(face,Rect2(at-Vector2(12,12),Vector2(24,24)),false)
+		else: draw_circle(at,9,UiAssets.player_color(str(r.get("color","blue"))))
+	if next_event_label.visible:
+		draw_style_box(UiAssets.tex_style("panel/panel_top_resource_bar",UiAssets.button(Color("2c2552")),Vector2(16,14),Vector2.ZERO),NEXT_EVENT_RECT)
+		var left: float = clampf((float(Session.snap.get("nextEventAt",0))-Net.now_ms())/60000.0,0.0,1.0)
+		var bar: Rect2 = Rect2(NEXT_EVENT_RECT.position+Vector2(18,40),Vector2(194,12))
+		draw_style_box(UiAssets.tex_style("button/progress_bar_frame",UiAssets.button(Color("28223f")),Vector2(10,5),Vector2.ZERO),bar)
+		if left > 0.02:
+			draw_style_box(UiAssets.tex_style("button/progress_bar_fill",UiAssets.button(UiAssets.COLOR_GOLD),Vector2(8,3),Vector2.ZERO),Rect2(bar.position+Vector2(3,3),Vector2((bar.size.x-6)*(1.0-left),bar.size.y-6)))
 	var joy: Vector2 = joy_center()
 	var base_tex: Texture2D = UiAssets.asset("hud/hud-joystick-base")
 	var knob_tex: Texture2D = UiAssets.asset("hud/hud-joystick-knob")

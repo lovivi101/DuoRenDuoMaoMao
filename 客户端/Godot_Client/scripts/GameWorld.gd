@@ -33,6 +33,15 @@ var freeze_until: int = 0
 var shake_until: int = 0
 var spectating: String = ""
 var fx: Array[Dictionary] = []
+# Floor decor, furniture art, props, generators, cage and drops. The node's own _draw runs
+# before its TileMapLayer children, so anything drawn there would sit under the floor.
+var objects: Node2D = Node2D.new()
+# Blocking cells covered by a furniture sprite (map.furniture) render as plain floor.
+var furniture_cells: Dictionary = {}
+# Atlas columns 8 / 9 hold the tile and concrete floors; zones pick their floor (map.zones).
+const FLOOR_COLUMN: Dictionary = {"wood": 0, "tile": 8, "concrete": 9}
+# Decor footprints in cells; anything unlisted is 1x1.
+const DECOR_SIZE: Dictionary = {"rug_dorm": Vector2(3, 2), "puddle": Vector2(2, 1), "bath_mat": Vector2(2, 1)}
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -43,10 +52,18 @@ func _ready() -> void:
 	if tiles.size() != int(map.w) * int(map.h):
 		push_error("Invalid map tile byte count")
 		return
+	for f: Dictionary in map.get("furniture", []):
+		if UiAssets.asset("sprite/furn-" + str(f.kind).replace("_", "-")):
+			for y: int in range(int(f.y), int(f.y) + int(f.h)):
+				for x: int in range(int(f.x), int(f.x) + int(f.w)):
+					furniture_cells[Vector2i(x, y)] = true
 	_build_tiles()
 	add_child(layer)
 	wall_layer.light_mask = 2
 	add_child(wall_layer)
+	objects.z_index = 1
+	objects.draw.connect(_draw_objects)
+	add_child(objects)
 	add_child(actors)
 	add_child(signals_layer)
 	signals_layer.z_index = 5
@@ -79,15 +96,15 @@ func _ready() -> void:
 	Net.message.connect(_message)
 	initialized = true
 	_snap(Session.snap)
-	queue_redraw()
+	objects.queue_redraw()
 
 func _build_tiles() -> void:
 	var set: TileSet = TileSet.new()
 	set.tile_size = Vector2i(32,32)
-	var atlas: Image = Image.create(256,32,false,Image.FORMAT_RGBA8)
-	var names: Array[String] = ["tile-floor-wood","tile-wall-solid","tile-wall-cracked","tile-door","tile-rubble","tile-wall-solid","tile-furniture","tile-shelf"]
-	var colors: Array[Color] = [Color("3a3f5c"),Color("9a9cc0"),Color("a594ac"),Color("b88a5f"),Color("5e566c"),Color("151424"),Color("8a6a4a"),Color("6d5a48")]
-	for i: int in 8:
+	var atlas: Image = Image.create(320,32,false,Image.FORMAT_RGBA8)
+	var names: Array[String] = ["tile-floor-wood","tile-wall-solid","tile-wall-cracked","tile-door","tile-rubble","tile-wall-solid","tile-furniture","tile-shelf","tile-floor-tile","tile-floor-concrete"]
+	var colors: Array[Color] = [Color("3a3f5c"),Color("9a9cc0"),Color("a594ac"),Color("b88a5f"),Color("5e566c"),Color("151424"),Color("8a6a4a"),Color("6d5a48"),Color("3b4462"),Color("403f4f")]
+	for i: int in 10:
 		var texture: Texture2D = UiAssets.asset("sprite/" + names[i])
 		# Always paint the procedural base first, then blend the art on top: tile art with
 		# keyed-out (transparent) edges would otherwise leave dark seams between cells.
@@ -95,7 +112,7 @@ func _build_tiles() -> void:
 			for y: int in 32:
 				for x: int in 32:
 					var c: Color = colors[i]
-					if i == 0:
+					if i in [0, 8, 9]:
 						# Floorboards: soft seams with staggered joints, never mistaken for brick walls.
 						if y % 8 == 7 or (x + (y / 8) * 11) % 32 == 0:
 							c = c.darkened(0.18)
@@ -114,7 +131,7 @@ func _build_tiles() -> void:
 	var source: TileSetAtlasSource = TileSetAtlasSource.new()
 	source.texture = ImageTexture.create_from_image(atlas)
 	source.texture_region_size = Vector2i(32,32)
-	for i: int in 8:
+	for i: int in 10:
 		source.create_tile(Vector2i(i,0))
 	set.add_source(source,0)
 	layer.tile_set = set
@@ -128,12 +145,13 @@ func _update_cell(x: int, y: int, tile: int) -> void:
 	if walls.has(key):
 		(walls[key] as Node).queue_free()
 		walls.erase(key)
-	var atlas_tile: Vector2i = Vector2i(clampi(tile,0,7),0)
-	if tile in STRUCTURE:
-		layer.set_cell(key,0,Vector2i(0,0))
+	var floor_cell: Vector2i = Vector2i(_floor_column(x,y),0)
+	var atlas_tile: Vector2i = floor_cell if tile == 0 else Vector2i(clampi(tile,0,7),0)
+	if tile in STRUCTURE and not furniture_cells.has(key):
+		layer.set_cell(key,0,floor_cell)
 		wall_layer.set_cell(key,0,atlas_tile)
 	else:
-		layer.set_cell(key,0,atlas_tile)
+		layer.set_cell(key,0,floor_cell if furniture_cells.has(key) else atlas_tile)
 		wall_layer.erase_cell(key)
 	if tile in BLOCKING:
 		var wall: StaticBody2D = StaticBody2D.new()
@@ -155,6 +173,12 @@ func _update_cell(x: int, y: int, tile: int) -> void:
 		wall.add_child(occluder)
 		add_child(wall)
 		walls[key] = wall
+
+func _floor_column(x: int, y: int) -> int:
+	for zone: Dictionary in map.get("zones", []):
+		if x >= int(zone.x) and y >= int(zone.y) and x < int(zone.x) + int(zone.w) and y < int(zone.y) + int(zone.h):
+			return int(FLOOR_COLUMN.get(str(zone.get("floor", "wood")), 0))
+	return 0
 
 func _light_texture(cone: bool) -> Texture2D:
 	var im: Image = Image.create(256,256,false,Image.FORMAT_RGBA8)
@@ -259,7 +283,7 @@ func _physics_process(delta: float) -> void:
 	camera.offset = Vector2(randf_range(-5,5),randf_range(-5,5)) if Config.settings.shake and Time.get_ticks_msec()<shake_until else Vector2.ZERO
 	_update_actors()
 	signals_layer.queue_redraw()
-	queue_redraw()
+	objects.queue_redraw()
 
 func _move_position(pos: Vector2, displacement: Vector2, ghost: bool) -> Vector2:
 	if ghost:
@@ -364,16 +388,26 @@ func _draw_actor(node: Node2D) -> void:
 	if Config.settings.colorblind:
 		node.draw_string(ThemeDB.fallback_font,Vector2(-5,-28),"H" if role == "hunter" else "C",HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color.WHITE)
 
-func _draw() -> void:
+func _draw_objects() -> void:
 	if not initialized:
 		return
+	for d: Dictionary in map.get("decor",[]):
+		var tex: Texture2D = UiAssets.asset("sprite/decor-"+str(d.kind).replace("_","-"))
+		if tex:
+			var cells: Vector2 = DECOR_SIZE.get(str(d.kind), Vector2.ONE)
+			objects.draw_texture_rect(tex,Rect2(_xy(d)*32,cells*32),false)
+	for f: Dictionary in map.get("furniture",[]):
+		var tex: Texture2D = UiAssets.asset("sprite/furn-"+str(f.kind).replace("_","-"))
+		if tex:
+			objects.draw_texture_rect(tex,Rect2(_xy(f)*32,Vector2(float(f.w),float(f.h))*32),false)
 	for prop: Dictionary in map.get("props",[]):
 		_object("prop-"+str(prop.prop).replace("_","-"),_xy(prop)*32,Color("b79577"))
 	for gen: Dictionary in Session.snap.get("generators",map.get("generators",[])):
 		var pos: Vector2 = _xy(gen)*32
-		_object("sprite-generator-fixed" if gen.get("fixed",false) else "sprite-generator",pos,Color("91b678") if gen.get("fixed",false) else Color("d4af67"))
-		draw_rect(Rect2(pos+Vector2(-16,-24),Vector2(32,4)),Color("282438"))
-		draw_rect(Rect2(pos+Vector2(-16,-24),Vector2(32*float(gen.get("progress",0)),4)),Color("ffc857"))
+		# Generators are objectives: drawn larger than props, progress bar right above.
+		_object("sprite-generator-fixed" if gen.get("fixed",false) else "sprite-generator",pos,Color("91b678") if gen.get("fixed",false) else Color("d4af67"),40)
+		objects.draw_rect(Rect2(pos+Vector2(-18,-22),Vector2(36,5)),Color("282438"))
+		objects.draw_rect(Rect2(pos+Vector2(-18,-22),Vector2(36*float(gen.get("progress",0)),5)),Color("ffc857"))
 	_object("sprite-cage",_xy(map.get("cage",{}))*32,Color("a8a9b4"),48)
 	for drop: Dictionary in Session.drops:
 		if drop.get("stage") == "landed":
@@ -382,15 +416,15 @@ func _draw() -> void:
 func _object(asset_name: String, pos: Vector2, color: Color, extent: float = 26) -> void:
 	var tex: Texture2D = UiAssets.asset("sprite/"+asset_name)
 	if tex:
-		draw_texture_rect(tex,Rect2(pos-Vector2.ONE*extent/2,Vector2.ONE*extent),false)
+		objects.draw_texture_rect(tex,Rect2(pos-Vector2.ONE*extent/2,Vector2.ONE*extent),false)
 	else:
-		draw_rect(Rect2(pos-Vector2.ONE*extent/2,Vector2.ONE*extent),color)
-		draw_rect(Rect2(pos-Vector2.ONE*extent/2,Vector2.ONE*extent),color.darkened(.5),false,2)
+		objects.draw_rect(Rect2(pos-Vector2.ONE*extent/2,Vector2.ONE*extent),color)
+		objects.draw_rect(Rect2(pos-Vector2.ONE*extent/2,Vector2.ONE*extent),color.darkened(.5),false,2)
 		if "cage" in asset_name:
 			for x: int in range(-20,21,8):
-				draw_line(pos+Vector2(x,-24),pos+Vector2(x,24),Color("222436"),3)
+				objects.draw_line(pos+Vector2(x,-24),pos+Vector2(x,24),Color("222436"),3)
 		elif "generator" in asset_name:
-			draw_string(ThemeDB.fallback_font,pos+Vector2(-8,7),"G",HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color("282338"))
+			objects.draw_string(ThemeDB.fallback_font,pos+Vector2(-8,7),"G",HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color("282338"))
 
 func _draw_signals() -> void:
 	var now: float = Time.get_ticks_msec()*0.001

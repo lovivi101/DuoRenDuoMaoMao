@@ -752,7 +752,7 @@ func _build_vote() -> void:
 
 func _build_role_reveal() -> void:
 	my_vote = -1
-	_add(_title_label("你的身份是…", Vector2(0, 30), Vector2(1334, 64), 52, UiAssets.COLOR_GOLD, true))
+	_add(_title_label("你的身份是…", Vector2(60, 30), Vector2(660, 64), 52, UiAssets.COLOR_GOLD, true))
 	var box: Panel = _panel(Vector2(1160, 24), Vector2(130, 110), "panel/panel_room_code_cell")
 	_add(box)
 	var timer: Label = _title_label("5s", Vector2(0, 20), Vector2(130, 70), 46, UiAssets.COLOR_GOLD, true)
@@ -762,17 +762,17 @@ func _build_role_reveal() -> void:
 	var role: String = Session.role()
 	var others: Array = ["hunter", "hider", "mole"]
 	others.erase(role)
-	# Dimmed backs of the other identities on each side, the player's card in front.
+	# Left: dimmed backs of the other identities on each side, the player's card in front.
 	for i: int in 2:
-		var back: Panel = _panel(Vector2(260 + i * 614, 200), Vector2(200, 300), "button/card_role_back")
+		var back: Panel = _panel(Vector2(80 + i * 460, 210), Vector2(190, 290), "button/card_role_back")
 		back.modulate = Color(0.55, 0.55, 0.65, 0.8)
 		back.rotation = -0.12 if i == 0 else 0.12
 		var info_b: Dictionary = ROLE_INFO[others[i]]
-		back.add_child(UiAssets.picture(str(info_b.art), Vector2(30, 40), Vector2(140, 140)))
-		back.add_child(_title_label(str(info_b.name), Vector2(0, 200), Vector2(200, 50), 32, info_b.color, true))
+		back.add_child(UiAssets.picture(str(info_b.art), Vector2(30, 40), Vector2(130, 130)))
+		back.add_child(_title_label(str(info_b.name), Vector2(0, 190), Vector2(190, 50), 30, info_b.color, true))
 		_add(back)
 	var info: Dictionary = ROLE_INFO.get(role, ROLE_INFO.hider)
-	var card: Panel = _panel(Vector2(477, 140), Vector2(380, 520), "button/card_role_front")
+	var card: Panel = _panel(Vector2(200, 130), Vector2(380, 520), "button/card_role_front")
 	_add(card)
 	card.add_child(UiAssets.picture(str(info.art), Vector2(70, 30), Vector2(240, 240)))
 	card.add_child(_title_label(str(info.name), Vector2(0, 280), Vector2(380, 72), 64, info.color, true))
@@ -780,7 +780,22 @@ func _build_role_reveal() -> void:
 	card.add_child(goal)
 	goal.add_child(_label(str(info.goal), Vector2(0, 0), Vector2(260, 52), 22, UiAssets.COLOR_GOLD, true))
 	card.add_child(_label(str(info.desc), Vector2(20, 422), Vector2(340, 70), 18, UiAssets.COLOR_TEXT, true))
-	_add(_label("身份仅自己可见 · 即将进入躲藏期", Vector2(0, 680), Vector2(1334, 30), 18, UiAssets.COLOR_MUTED, true))
+	# Right: overview of this match's map, so everyone knows the layout before hiding.
+	var map_id: String = str(Session.game.get("mapId", "old_dorm"))
+	var map_info: Dictionary = MAP_INFO.get(map_id, MAP_INFO.old_dorm)
+	var map_panel: Panel = _panel(Vector2(760, 150), Vector2(530, 420))
+	_add(map_panel)
+	_section_title(map_panel, str(map_info.name), "icon/map-icon")
+	var overview: String = "mapcard/" + str(map_info.card) + "-overview"
+	if UiAssets.asset(overview) == null:
+		overview = "mapcard/" + str(map_info.card)
+	var frame: Panel = _panel(Vector2(26, 72), Vector2(478, 310), "button/card_map_frame")
+	map_panel.add_child(frame)
+	frame.add_child(UiAssets.picture(overview, Vector2(10, 10), Vector2(458, 290)))
+	var hint: Panel = _panel(Vector2(760, 590), Vector2(530, 64), "panel/panel_top_resource_bar")
+	_add(hint)
+	hint.add_child(UiAssets.picture("icon/eye-closed-icon", Vector2(22, 16), Vector2(32, 32)))
+	hint.add_child(_label("身份仅自己可见  ·  准备进入躲藏期", Vector2(64, 0), Vector2(440, 64), FS_BODY, UiAssets.COLOR_TEXT))
 
 # ---------------------------------------------------------------- 15 幽灵阵营选择
 
@@ -1385,13 +1400,17 @@ func prepare_debug_shot(name: String) -> void:
 躲好，今晚一起开局！"}
 	Session.game = {"you":{"id":"demo", "role":"hunter" if page == 14 else "hider"}}
 	if page in [13, 14, 16]:
-		var bytes: PackedByteArray = PackedByteArray()
-		bytes.resize(64 * 40)
-		for y: int in 40:
-			for x: int in 64:
-				if x == 0 or x == 63 or y == 0 or y == 39 or (x == 27 and y > 8 and y < 33 and y != 19): bytes[y * 64 + x] = 1
-		Session.game = {"you":{"id":"demo", "role":"hunter" if page == 14 else "hider"}, "players":[{"id":"demo", "color":"blue", "nickname":"小夜猫"}], "map":{"w":64,"h":40,"tiles":Marshalls.raw_to_base64(bytes),"hunterSpawn":{"x":32,"y":20},"hiderSpawns":[{"x":32,"y":20}],"props":[{"x":35,"y":20,"prop":"cardboard_box"}],"generators":[{"id":0,"x":36,"y":22}]}}
-		Session.snap = {"you":{"x":32.0,"y":20.0,"state":"normal","visionRadius":5.0,"stamina":3.0,"items":["smoke","banana"],"flashlight":true},"players":[],"alive":7,"totalHiders":9,"generators":[{"id":0,"x":36,"y":22,"progress":0.4,"fixed":false}]}
+		# The real 旧宿舍楼 map (exported from the server's wireMap) so shots show furniture and decor.
+		var map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/old_dorm_map.json"))
+		Session.game = {"mapId":"old_dorm", "you":{"id":"demo", "role":"hunter" if page == 14 else "hider"}, "players":[{"id":"demo", "color":"blue", "nickname":"小夜猫"}], "map":map}
+		var at: Vector2 = Vector2(31.5, 21.0) if page == 14 else Vector2(12.5, 6.2)
+		var roster: Array = []
+		for i: int in 9:
+			roster.append({"color":UiAssets.HIDER_COLORS[(i + 5) % 8], "caught":i >= 7})
+		var gens: Array = []
+		for g: Dictionary in map.generators:
+			gens.append({"id":g.id, "x":g.x, "y":g.y, "progress":0.4 if int(g.id) == 0 else 0.0, "fixed":false})
+		Session.snap = {"you":{"x":at.x,"y":at.y,"state":"normal","visionRadius":5.0,"stamina":3.0,"items":["smoke","banana"],"flashlight":true},"players":[],"alive":7,"totalHiders":9,"roster":roster,"nextEventAt":Net.now_ms() + 12000,"generators":gens}
 		Session.phase = "final" if page == 16 else "hunt"
 		Session.phase_ends = Net.now_ms() + (28000.0 if page == 16 else 402000.0)
 		if page == 16:

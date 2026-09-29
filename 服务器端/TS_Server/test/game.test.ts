@@ -135,3 +135,20 @@ describe('items and events',()=>{
  },15000);
 });
 import {visionRadius as visionRadiusForSmoke} from '../src/game/vision.js';
+describe('visual layout data and HUD snapshot fields',()=>{
+ const SIZE:Record<string,[number,number]>={rug_dorm:[3,2],puddle:[2,1],bath_mat:[2,1]};
+ it('furniture sprites cover exactly their blocking tiles; decor lies on walkable floor away from props',()=>{
+  const m=createOldDorm(),t=(x:number,y:number)=>m.tiles[y*m.w+x];
+  for(const f of m.furniture)for(let y=f.y;y<f.y+f.h;y++)for(let x=f.x;x<f.x+f.w;x++)expect(t(x,y),`${f.kind}@${x},${y}`).toBe(6);
+  const covered=m.furniture.reduce((n,f)=>n+f.w*f.h,0);expect(covered).toBe(Array.from(m.tiles).filter(v=>v===6).length);
+  for(const d of m.decor){const [w,h]=SIZE[d.kind]??[1,1];for(let y=d.y;y<d.y+h;y++)for(let x=d.x;x<d.x+w;x++)expect(t(x,y),`${d.kind}@${x},${y}`).toBe(0)}
+  const small=m.decor.filter(d=>!SIZE[d.kind]);for(const d of small)expect(m.props.some(p=>Math.floor(p.x)===d.x&&Math.floor(p.y)===d.y),`${d.kind}@${d.x},${d.y}`).toBe(false);
+  expect(wireMap(m).decor).toHaveLength(m.decor.length);
+ });
+ it('snapshot carries the survivor roster (hider-looking players) and the next event time',()=>{
+  const g=game(),h=g.players.find(p=>p.role==='hunter')!,v=g.players.find(p=>p.role==='hider')!;
+  catchPlayer(g,v,h);const s=snapshotFor(g,h.id)!;
+  expect(s.roster).toHaveLength(g.players.filter(p=>p.role!=='hunter').length);
+  expect(s.roster.filter(r=>r.caught)).toHaveLength(1);expect(s.nextEventAt).toBe(g.nextEventAt);
+ });
+});

@@ -20,7 +20,7 @@ export interface GamePlayer extends Player,Pos {
  score:Record<string,number>;survival:number;captures:number;accused:boolean;eliminated:boolean;
  ai?:{path:Pos[];goal:Pos|null;nextThink:number;mode:string;until:number;suspectAt:number;patrolRun?:boolean};
 }
-export interface GameMap {id:string;w:number;h:number;tileSize:number;tiles:Uint8Array;zones:{name:string;x:number;y:number;w:number;h:number;floor:string}[];hunterSpawn:Pos;cage:Pos;hiderSpawns:Pos[];generators:(Pos&{id:number})[];itemSpots:Pos[];props:(Pos&{prop:string})[];lockedDoors:Pos[]}
+export interface GameMap {id:string;w:number;h:number;tileSize:number;tiles:Uint8Array;zones:{name:string;x:number;y:number;w:number;h:number;floor:string}[];hunterSpawn:Pos;cage:Pos;hiderSpawns:Pos[];generators:(Pos&{id:number})[];itemSpots:Pos[];props:(Pos&{prop:string})[];lockedDoors:Pos[];furniture:{x:number;y:number;w:number;h:number;kind:string}[];decor:{x:number;y:number;kind:string}[]}
 export interface GameMessage {t:string;[key:string]:unknown}
 export interface GameState {
  id:string;roomCode:string;mapId:string;map:GameMap;phase:'assign'|'hide'|'hunt'|'final'|'result'|'waiting';

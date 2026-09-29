@@ -42,6 +42,18 @@ export function createOldDorm():GameMap {
  for(const x of [7,20,37,54]){prop(x,29,'cardboard_box');prop(x+1,34,'cardboard_box');prop(x,37,'oil_drum')}
  for(const x of [8,14,21]){prop(x,19,'potted_plant');prop(x,24,'trash_can')}
 
+ // Visual-only layout data: furniture sprites cover their blocking tiles (x,y = top-left
+ // cell, w/h in cells); decor sits flat on walkable floor and never affects movement.
+ const furniture:GameMap['furniture']=[];
+ for(const x of [2,11,20,29,38,47,56])for(const dx of [0,4])furniture.push({x:x+dx,y:3,w:1,h:2,kind:'bunk_bed'});
+ for(const x of [43,53])furniture.push({x,y:17,w:2,h:6,kind:'dining_table'});
+ const decor:GameMap['decor']=[];
+ const put=(x:number,y:number,kind:string)=>decor.push({x,y,kind});
+ [2,11,20,29,38,47,56].forEach((x,i)=>{put(x+1,5,'rug_dorm');put(x+2,4,'slippers');put(x+6,2,'books');put(x+6,6,i%2?'papers':'laundry_basket')});
+ put(12,10,'papers');put(40,11,'papers');put(58,9,'books');
+ put(14,21,'puddle');put(19,15,'puddle');put(3,22,'bath_mat');put(11,24,'bath_mat');put(22,15,'mop_bucket');
+ put(61,20,'mop_bucket');put(28,24,'papers');
+ put(3,32,'mop_bucket');put(26,31,'papers');put(40,37,'puddle');put(58,28,'laundry_basket');
  const map:GameMap={id:'old_dorm',w:W,h:H,tileSize:32,tiles,
  zones:[{name:'中央大厅',x:26,y:14,w:12,h:12,floor:'tile'},
  {name:'北区宿舍走廊',x:1,y:1,w:62,h:12,floor:'wood'},
@@ -52,7 +64,7 @@ export function createOldDorm():GameMap {
  hiderSpawns:[center(5,5),center(23,5),center(41,5),center(59,5),center(48,20),center(58,24),center(7,28),center(42,37),center(12,19),center(21,24),center(29,10)],
  generators:[{id:0,...center(14,4)},{id:1,...center(57,19)},{id:2,...center(24,33)}],
  itemSpots:[center(5,5),center(23,10),center(59,5),center(42,20),center(58,24),center(50,15),center(7,28),center(42,37),center(58,32),center(12,19),center(21,24),center(15,15)],
- props,lockedDoors};
+ props,lockedDoors,furniture,decor};
  return map;
 }
 export const oldDorm=createOldDorm();
