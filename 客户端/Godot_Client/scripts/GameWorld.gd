@@ -560,7 +560,14 @@ func _draw_signals() -> void:
 	for drop: Dictionary in Session.drops:
 		if drop.get("stage") != "taken":
 			var pos: Vector2 = _xy(drop)*32
-			signals_layer.draw_line(pos,pos-Vector2(0,80),Color(.9,.75,.35,.45),7)
+			# Supply drop: a beam that fades upward and pulses, a ring on the floor and a
+			# star on top, so it reads as a marker rather than a stray bar of light.
+			var pulse: float = 0.75 + 0.25*sin(now*4.0)
+			for k: int in 8:
+				signals_layer.draw_line(pos-Vector2(0,k*10),pos-Vector2(0,k*10+10),Color(1,.82,.4,(1.0-k/8.0)*0.38*pulse),9.0-k*0.6)
+			signals_layer.draw_arc(pos,14,0,TAU,24,Color(1,.82,.4,.6*pulse),2)
+			var star: Texture2D = UiAssets.asset("icon/star-icon")
+			if star: signals_layer.draw_texture_rect(star,Rect2(pos-Vector2(9,96),Vector2(18,18)),false,Color(1,1,1,pulse))
 	var remaining: Array[Dictionary] = []
 	for effect: Dictionary in fx:
 		if int(effect.until) > Time.get_ticks_msec():

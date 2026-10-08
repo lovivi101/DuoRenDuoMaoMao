@@ -42,6 +42,8 @@ const MAP_INFO: Dictionary = {"old_dorm": {"name":"旧宿舍楼", "card":"map-ol
 	"random": {"name":"随机地图", "card":"map-old-dorm", "desc":"投票时三张图随机出现", "feature":"每局由投票决定去哪张图"}}
 const MAP_ORDER: Array[String] = ["old_dorm", "night_hospital", "night_mall", "midnight_cruise", "snow_lodge", "random"]
 const ROLE_INFO: Dictionary = {"hider": {"name":"藏者", "goal":"存活到最后！", "desc":"利用伪装躲开猎手，\n修好发电机缩短倒计时", "art":"role/role-hider", "color":Color("7fb2ff")}, "hunter": {"name":"猎手", "goal":"抓住所有藏者！", "desc":"打开手电追踪脚印与波纹，\n拍打可疑的物件", "art":"role/role-hunter", "color":Color("e5383b")}, "mole": {"name":"卧底", "goal":"暗中帮助猎手！", "desc":"混在藏者中报点，\n别被识破身份", "art":"role/role-mole", "color":Color("b98cff")}}
+# Every score source per role (server game/*.ts score() labels), for the result breakdown.
+const SCORE_ITEMS: Dictionary = {"hider": ["存活到结束", "存活分钟", "修理发电机", "解救队友", "指认卧底"], "hunter": ["抓捕", "最终抓捕", "道具干扰"], "mole": ["卧底报点", "卧底存活", "修理发电机", "存活分钟"]}
 # Type scale at the 1334x750 base resolution.
 const FS_TITLE: int = 40
 const FS_BUTTON: int = 24
@@ -132,6 +134,11 @@ func _process(delta: float) -> void:
 			var timer: Label = active_page.find_child("Timer", true, false) as Label
 			if timer:
 				timer.text = "%ds" % ceili(countdown)
+				var urgent: bool = countdown <= 3.0
+				timer.add_theme_color_override("font_color", UiAssets.COLOR_RED if urgent else UiAssets.COLOR_GOLD)
+				var pulse: float = 1.0 + (0.12 * absf(sin(countdown * PI)) if urgent else 0.0)
+				timer.pivot_offset = timer.size / 2
+				timer.scale = Vector2(pulse, pulse)
 
 func _unhandled_input(event: InputEvent) -> void:
 	# Physical keyboard for the room-code keypad (page 09).
@@ -232,14 +239,42 @@ func _build_splash() -> void:
 	var logo: TextureRect = UiAssets.picture("logo/game_logo_title", Vector2(40, 36), Vector2(560, 270))
 	if logo.texture: active_page.add_child(logo)
 	else: _add(_title_label("熄灯", Vector2(60, 90), Vector2(460, 120), 96, UiAssets.COLOR_GOLD))
-	_add(_label("当灯光熄灭，另一场游戏开始。", Vector2(70, 300), Vector2(520, 40), 24, UiAssets.COLOR_TEXT))
+	_add(_tagline(logo))
 	_add(_progress(Vector2(417, 600), Vector2(500, 26), 0.68))
-	_add(_label("正在更新资源… 68%", Vector2(0, 634), Vector2(1334, 30), FS_SMALL, UiAssets.COLOR_MUTED, true))
+	var loading: RichTextLabel = RichTextLabel.new()
+	loading.bbcode_enabled = true
+	loading.fit_content = true
+	loading.scroll_active = false
+	loading.position = Vector2(0, 636)
+	loading.size = Vector2(1334, 30)
+	loading.add_theme_font_size_override("normal_font_size", 18)
+	loading.add_theme_color_override("default_color", UiAssets.COLOR_TEXT)
+	loading.add_theme_color_override("font_outline_color", Color("0c0a1a"))
+	loading.add_theme_constant_override("outline_size", 4)
+	loading.text = "[center]正在更新资源… [color=#ffc857]68%[/color][/center]"
+	loading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_add(loading)
 	_add(_label("v" + Config.VERSION, Vector2(1200, 700), Vector2(110, 26), 14, UiAssets.COLOR_MUTED))
 	if not notice.is_empty():
 		_show_notice()
 	else:
 		get_tree().create_timer(1.6).timeout.connect(_leave_splash)
+
+## Slogan 12px under the logo art's visible bottom edge, left-aligned with its visible left edge.
+func _tagline(logo: TextureRect) -> Label:
+	var pos: Vector2 = Vector2(70, 300)
+	if logo.texture:
+		var used: Rect2 = UiAssets.used_rect("logo/game_logo_title")
+		var tex_size: Vector2 = logo.texture.get_size()
+		var k: float = minf(logo.size.x / tex_size.x, logo.size.y / tex_size.y)
+		var origin: Vector2 = logo.position + (logo.size - tex_size * k) / 2
+		pos = origin + Vector2(used.position.x * k, used.end.y * k + 12)
+	var l: Label = _label("当灯光熄灭，另一场游戏开始", pos, Vector2(520, 30), 20, UiAssets.COLOR_TEXT)
+	var spaced: FontVariation = FontVariation.new()
+	spaced.base_font = l.get_theme_font("font")
+	spaced.spacing_glyph = 4
+	l.add_theme_font_override("font", spaced)
+	return l
 
 func _leave_splash() -> void:
 	if Router.current == 1 and Session.token.is_empty(): Router.go(2)
@@ -274,7 +309,7 @@ func _build_login() -> void:
 	var logo: TextureRect = UiAssets.picture("logo/game_logo_title", Vector2(40, 40), Vector2(520, 250))
 	if logo.texture: active_page.add_child(logo)
 	else: _add(_title_label("熄灯", Vector2(60, 70), Vector2(400, 120), 96, UiAssets.COLOR_GOLD))
-	_add(_label("当灯光熄灭，另一场游戏开始", Vector2(70, 290), Vector2(460, 34), 22, UiAssets.COLOR_TEXT))
+	_add(_tagline(logo))
 	_add(_sprite_figure(str(Session.user.get("color", "blue")), Vector2(90, 420), 230))
 	var age: Panel = _panel(Vector2(28, 626), Vector2(96, 96), "panel/panel_room_code_cell")
 	_add(age)
@@ -426,9 +461,10 @@ func _sms_login() -> void:
 
 func _build_account() -> void:
 	_header("账号密码登录", 2)
-	var panel: Panel = _panel(Vector2(357, 110), Vector2(620, 590))
+	# Panel hugs its content: the register form has one more row.
+	var panel: Panel = _panel(Vector2(357, 120 if register_mode else 150), Vector2(620, 580 if register_mode else 510))
 	_add(panel)
-	panel.add_child(_title_label("熄灯", Vector2(0, 22), Vector2(620, 56), 40, UiAssets.COLOR_GOLD, true))
+	panel.add_child(_title_label("熄灯", Vector2(0, 22), Vector2(620, 56), 48, UiAssets.COLOR_GOLD, true))
 	var tabs: HBoxContainer = _tabs(["登录", "注册"], 1 if register_mode else 0, Vector2(60, 90), Vector2(500, 60), func(index: int) -> void:
 		register_mode = index == 1
 		show_page(4))
@@ -440,9 +476,19 @@ func _build_account() -> void:
 	password_edit = _edit("请输入密码", Vector2(110, 254), Vector2(450, 68))
 	password_edit.secret = true
 	panel.add_child(password_edit)
-	var reveal: Button = _icon_button("icon/eye-open-icon", Vector2(500, 264), Vector2(50, 48))
+	# Show-password eye: plain 28px icon in a 44x44 hit area inside the field's right end.
+	var reveal: Button = Button.new()
+	reveal.flat = true
+	reveal.position = Vector2(508, 266)
+	reveal.size = Vector2(44, 44)
+	reveal.icon = UiAssets.asset("icon/eye-closed-icon")
+	reveal.expand_icon = true
+	reveal.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reveal.add_theme_constant_override("icon_max_width", 30)
+	reveal.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	reveal.pressed.connect(func() -> void:
 		password_edit.secret = not password_edit.secret
+		reveal.icon = UiAssets.asset("icon/eye-closed-icon" if password_edit.secret else "icon/eye-open-icon")
 		if is_instance_valid(confirm_edit): confirm_edit.secret = password_edit.secret)
 	panel.add_child(reveal)
 	var y: float = 340.0
@@ -453,15 +499,19 @@ func _build_account() -> void:
 		panel.add_child(confirm_edit)
 		y += 82.0
 	else:
-		var forgot: Button = _link_button("忘记密码？", Vector2(430, y), Vector2(130, 32))
+		var forgot: Button = _link_button("忘记密码？", Vector2(420, y - 8), Vector2(140, 44))
+		forgot.add_theme_color_override("font_color", UiAssets.COLOR_GOLD)
+		forgot.add_theme_color_override("font_hover_color", UiAssets.COLOR_GOLD.lightened(0.2))
+		forgot.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		forgot.add_child(_underline(Vector2(36, 34), 104))
 		forgot.pressed.connect(_forgot_password)
 		panel.add_child(forgot)
-		y += 44.0
-	var submit: Button = _button("注册" if register_mode else "登录", Vector2(60, y + 20), Vector2(500, 84), UiAssets.COLOR_GOLD, 32)
+		y += 36.0
+	var submit: Button = _button("注册" if register_mode else "登录", Vector2(60, y + 12), Vector2(500, 84), UiAssets.COLOR_GOLD, 32)
 	submit.pressed.connect(_account_login)
 	panel.add_child(submit)
 	if register_mode:
-		panel.add_child(_label("注册后即可登录", Vector2(0, y + 110), Vector2(620, 24), 14, UiAssets.COLOR_MUTED, true))
+		panel.add_child(_label("注册后即可登录", Vector2(0, y + 104), Vector2(620, 24), FS_SMALL, UiAssets.COLOR_MUTED, true))
 
 func _account_login() -> void:
 	if not _consented(): return
@@ -486,7 +536,7 @@ func _build_profile() -> void:
 	_add(_sprite_figure(color, Vector2(160, 170), 380))
 	var panel: Panel = _panel(Vector2(640, 110), Vector2(650, 590))
 	_add(panel)
-	panel.add_child(_label("昵称", Vector2(56, 30), Vector2(200, 32), 22, UiAssets.COLOR_GOLD))
+	panel.add_child(_label("✦ 昵称", Vector2(44, 26), Vector2(240, 36), 22, UiAssets.COLOR_GOLD))
 	var keep: String = nickname_edit.text if is_instance_valid(nickname_edit) else str(Session.user.get("nickname", "小夜猫"))
 	nickname_edit = _edit("输入 2–12 字昵称", Vector2(44, 72), Vector2(470, 70))
 	nickname_edit.text = keep
@@ -495,19 +545,19 @@ func _build_profile() -> void:
 	var dice: Button = _icon_button("icon/dice-icon", Vector2(528, 72), Vector2(78, 70), Color("4d4385"))
 	dice.pressed.connect(_random_name)
 	panel.add_child(dice)
-	panel.add_child(_label("选择形象", Vector2(44, 166), Vector2(200, 32), 22, UiAssets.COLOR_GOLD))
+	panel.add_child(_label("✦ 选择形象", Vector2(44, 160), Vector2(240, 36), 22, UiAssets.COLOR_GOLD))
 	for i: int in 8:
 		var key: String = UiAssets.HIDER_COLORS[i]
 		var selected: bool = key == color
-		var cell: Button = _card_button(Vector2(44 + (i % 4) * 142, 210 + (i / 4) * 142), Vector2(128, 128), selected)
+		var cell: Button = _card_button(Vector2(44 + (i % 4) * 142, 204 + (i / 4) * 138), Vector2(128, 128), selected)
 		cell.add_child(_avatar({"color": key}, Vector2(10, 10), 108))
 		if selected:
-			cell.add_child(UiAssets.picture("icon/check-icon", Vector2(92, 4), Vector2(32, 32)))
+			cell.add_child(_selected_ring(Vector2(128, 128)))
 		cell.pressed.connect(func() -> void:
 			Session.user["color"] = key
 			show_page(5))
 		panel.add_child(cell)
-	var enter: Button = _button("进入游戏  ▶", Vector2(44, 500), Vector2(562, 76), UiAssets.COLOR_GOLD, 30)
+	var enter: Button = _button("进入游戏  ▶", Vector2(44, 486), Vector2(562, 76), UiAssets.COLOR_GOLD, 30)
 	enter.pressed.connect(_create_profile)
 	panel.add_child(enter)
 
@@ -521,12 +571,15 @@ func _create_profile() -> void:
 func _build_lobby() -> void:
 	var user: Dictionary = Session.user
 	# Top-left player card: avatar, nickname, level and experience bar.
-	var card: Panel = _panel(Vector2(24, 20), Vector2(330, 96), "panel/panel_top_resource_bar")
+	var card: Panel = _panel(Vector2(24, 20), Vector2(380, 96), "panel/panel_top_resource_bar")
 	_add(card)
 	card.add_child(_avatar(user, Vector2(12, 10), 76))
-	card.add_child(_label(str(user.get("nickname", "游客")), Vector2(98, 12), Vector2(220, 32), 22, UiAssets.COLOR_TEXT))
-	card.add_child(_label("Lv.%d" % int(user.get("level", 1)), Vector2(98, 46), Vector2(70, 24), FS_SMALL, UiAssets.COLOR_GOLD))
-	card.add_child(_progress(Vector2(160, 48), Vector2(150, 22), float(int(user.get("exp", 0)) % 100) / 100.0))
+	card.add_child(_label(str(user.get("nickname", "游客")), Vector2(98, 8), Vector2(260, 34), 22, UiAssets.COLOR_TEXT))
+	# Server levels: 1 + exp / 500.
+	var exp_in_level: int = int(user.get("exp", 0)) % 500
+	card.add_child(_label("Lv.%d" % int(user.get("level", 1)), Vector2(98, 44), Vector2(70, 32), 18, UiAssets.COLOR_GOLD))
+	card.add_child(_progress(Vector2(166, 50), Vector2(120, 22), exp_in_level / 500.0))
+	card.add_child(_label("%d/500" % exp_in_level, Vector2(290, 44), Vector2(80, 32), FS_SMALL, UiAssets.COLOR_MUTED))
 	# Top-centre currencies, top-right settings.
 	for i: int in 2:
 		var chip: Control = _resource_chip(["icon/coin-icon", "icon/gem-icon"][i], str(int(user.get(["coins", "gems"][i], 0))), Vector2(470 + i * 230, 30), Vector2(210, 60))
@@ -542,21 +595,52 @@ func _build_lobby() -> void:
 	var quick: Button = _button("快速匹配  ▶", Vector2(920, 190), Vector2(380, 120), UiAssets.COLOR_GOLD, 40)
 	quick.pressed.connect(_match_start)
 	_add(quick)
-	var create: Button = _button("创建房间", Vector2(920, 326), Vector2(380, 84), Color("3959b8"), 28, "icon/plus-icon")
-	create.pressed.connect(func() -> void: Router.go(8))
-	_add(create)
-	var join: Button = _button("加入房间", Vector2(920, 424), Vector2(380, 84), Color("7047b9"), 28, "icon/friends-icon")
-	join.pressed.connect(func() -> void: Router.go(9))
-	_add(join)
-	# Bottom navigation.
-	var nav: Panel = _panel(Vector2(100, 632), Vector2(800, 100), "panel/panel_bottom_nav")
+	for spec: Array in [["创建房间", 326.0, Color("3959b8"), "icon/plus-icon", 8], ["加入房间", 424.0, Color("7047b9"), "icon/join-room-icon", 9]]:
+		var b: Button = _button(str(spec[0]), Vector2(920, spec[1]), Vector2(380, 84), spec[2], 28, str(spec[3]))
+		# Icon and caption read as one left-aligned unit.
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.add_theme_constant_override("icon_max_width", 48)
+		b.add_theme_constant_override("h_separation", 18)
+		var page: int = spec[4]
+		b.pressed.connect(func() -> void: Router.go(page))
+		_add(b)
+	# Bottom navigation, centred under the whole screen.
+	var nav: Panel = _panel(Vector2(152, 632), Vector2(1030, 100), "panel/panel_bottom_nav")
 	_add(nav)
 	var items: Array = [["好友", "icon/friends-icon"], ["衣柜", "icon/wardrobe-icon"], ["商店", "icon/shop-icon"], ["战绩", "icon/trophy-icon"], ["任务", "icon/task-icon"]]
 	for i: int in items.size():
-		var b: Button = _nav_button(str(items[i][0]), str(items[i][1]), Vector2(30 + i * 150, 8), Vector2(140, 84))
+		var b: Button = _nav_button(str(items[i][0]), str(items[i][1]), Vector2(30 + i * 196, 8), Vector2(186, 84))
+		b.name = "Nav%d" % i
 		b.pressed.connect(func() -> void:
 			Router.go([18, 20, 21, 22, 23][i]))
 		nav.add_child(b)
+	_lobby_badges(nav)
+
+## Red dot on the 任务 tab while a finished daily task is waiting to be claimed.
+func _lobby_badges(nav: Panel) -> void:
+	var tasks: Array = tasks_cache.get("tasks", [])
+	if tasks.is_empty():
+		var response: Dictionary = await Api.get_json("/tasks")
+		if not response.get("ok", false) or not is_instance_valid(nav): return
+		tasks = response.get("tasks", [])
+	for t: Dictionary in tasks:
+		if int(t.get("progress", 0)) >= int(t.get("goal", 1)) and not bool(t.get("claimed", false)):
+			var tab: Control = nav.get_node_or_null("Nav4")
+			if tab: tab.add_child(_red_dot(Vector2(tab.size.x / 2 + 18, 2)))
+			return
+
+func _red_dot(pos: Vector2) -> Panel:
+	var dot: Panel = Panel.new()
+	dot.position = pos
+	dot.size = Vector2(14, 14)
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = UiAssets.COLOR_RED
+	style.border_color = Color("fff4d2")
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(7)
+	dot.add_theme_stylebox_override("panel", style)
+	return dot
 
 func _match_start() -> void:
 	Net.send("match.start"); Router.go(7)
@@ -566,9 +650,10 @@ func _match_start() -> void:
 func _build_match() -> void:
 	var panel: Panel = _panel(Vector2(307, 60), Vector2(720, 630))
 	_add(panel)
-	panel.add_child(_title_label("快速匹配中", Vector2(0, 28), Vector2(720, 56), 40, UiAssets.COLOR_GOLD, true))
+	panel.add_child(_title_label("快速匹配中", Vector2(0, 22), Vector2(720, 56), 48, UiAssets.COLOR_GOLD, true))
+	panel.add_child(_label("正在寻找一起躲藏的伙伴…", Vector2(0, 76), Vector2(720, 28), FS_SMALL, UiAssets.COLOR_MUTED, true))
 	var elapsed: int = int(Session.match_status.get("elapsedSec", 0))
-	panel.add_child(_title_label("%02d:%02d" % [elapsed / 60, elapsed % 60], Vector2(0, 88), Vector2(720, 70), 64, UiAssets.COLOR_TEXT, true))
+	panel.add_child(_title_label("%02d:%02d" % [elapsed / 60, elapsed % 60], Vector2(0, 100), Vector2(720, 64), 60, UiAssets.COLOR_TEXT, true))
 	var found: int = int(Session.match_status.get("found", 1))
 	var needed: int = int(Session.match_status.get("needed", 8))
 	panel.add_child(_label("已找到 %d / %d" % [found, needed], Vector2(0, 166), Vector2(720, 30), 22, UiAssets.COLOR_GOLD, true))
@@ -577,12 +662,12 @@ func _build_match() -> void:
 		if i < found:
 			var p: Dictionary = {"color": UiAssets.HIDER_COLORS[(i + 5) % 8]}
 			if i == 0: p = Session.user
-			slot.add_child(_avatar(p, Vector2(9, 12), 76))
+			slot.add_child(_avatar(p, Vector2(2, 5), 90))
 		else:
 			slot.add_child(_title_label("?", Vector2(0, 22), Vector2(94, 56), 40, UiAssets.COLOR_MUTED, true))
 		panel.add_child(slot)
 	var can_fill: bool = bool(Session.match_status.get("canAiFill", false))
-	panel.add_child(_label("匹配超过 60 秒可由 AI 补位开局" if not can_fill else "已等待超过 60 秒，可以 AI 补位开局", Vector2(0, 450), Vector2(720, 26), FS_SMALL, UiAssets.COLOR_MUTED, true))
+	panel.add_child(_label("⚠ " + ("匹配超过 60 秒可由 AI 补位开局" if not can_fill else "已等待超过 60 秒，可以 AI 补位开局"), Vector2(0, 446), Vector2(720, 30), FS_SMALL, UiAssets.COLOR_GOLD if can_fill else UiAssets.COLOR_MUTED, true))
 	var cancel: Button = _button("取消匹配", Vector2(90, 500), Vector2(250, 80), Color("38345e"), 26)
 	cancel.pressed.connect(func() -> void: Net.send("match.cancel"); Router.go(6))
 	panel.add_child(cancel)
@@ -635,21 +720,25 @@ func _build_create_room() -> void:
 	_add(panel)
 	_section_title(panel, "房间设置", "icon/settings-icon")
 	var durations: Array = [300, 480, 600]
-	panel.add_child(_label("对局时长", Vector2(40, 90), Vector2(170, 52), FS_BODY, UiAssets.COLOR_TEXT))
+	# Every row: 28px icon, caption, control; all controls end at x=670 (screen x=1200).
+	panel.add_child(UiAssets.picture("icon/timer-icon", Vector2(36, 101), Vector2(30, 30)))
+	panel.add_child(_label("对局时长", Vector2(76, 90), Vector2(140, 52), FS_BODY, UiAssets.COLOR_TEXT))
 	panel.add_child(_tabs(["5 分钟", "8 分钟", "10 分钟"], durations.find(int(room_settings.durationSec)), Vector2(220, 86), Vector2(450, 58), func(i: int) -> void:
 		room_settings.durationSec = durations[i]
 		show_page(8)))
 	var hunters: Array = ["auto", 1, 2]
-	panel.add_child(_label("猎手人数", Vector2(40, 164), Vector2(170, 52), FS_BODY, UiAssets.COLOR_TEXT))
+	panel.add_child(UiAssets.picture("icon/flashlight-icon", Vector2(36, 175), Vector2(30, 30)))
+	panel.add_child(_label("猎手人数", Vector2(76, 164), Vector2(140, 52), FS_BODY, UiAssets.COLOR_TEXT))
 	panel.add_child(_tabs(["自动", "1 人", "2 人"], hunters.find(room_settings.hunterCount), Vector2(220, 160), Vector2(450, 58), func(i: int) -> void:
 		room_settings.hunterCount = hunters[i]
 		show_page(8)))
-	var toggles: Array = [["卧底模式", "moleEnabled"], ["近距离语音", "voiceEnabled"], ["AI 补位", "aiFill"]]
+	var toggles: Array = [["卧底模式", "moleEnabled", "icon/mask-icon"], ["近距离语音", "voiceEnabled", "icon/mic-icon"], ["AI 补位", "aiFill", "icon/robot-icon"]]
 	for i: int in toggles.size():
 		var y: float = 244 + i * 64
 		var key: String = str(toggles[i][1])
-		panel.add_child(_label(str(toggles[i][0]), Vector2(40, y), Vector2(250, 52), FS_BODY, UiAssets.COLOR_TEXT))
-		panel.add_child(_toggle(Vector2(560, y + 4), bool(room_settings[key]), func(value: bool) -> void: room_settings[key] = value))
+		panel.add_child(UiAssets.picture(str(toggles[i][2]), Vector2(36, y + 11), Vector2(30, 30)))
+		panel.add_child(_label(str(toggles[i][0]), Vector2(76, y), Vector2(250, 52), FS_BODY, UiAssets.COLOR_TEXT))
+		panel.add_child(_toggle(Vector2(582, y + 4), bool(room_settings[key]), func(value: bool) -> void: room_settings[key] = value))
 	var create: Button = _button("创建房间  ▶", Vector2(187, 444), Vector2(340, 80), UiAssets.COLOR_GOLD, 30)
 	create.pressed.connect(_create_room)
 	panel.add_child(create)
@@ -809,7 +898,7 @@ func _build_vote() -> void:
 	ring.add_child(timer)
 	countdown = maxf(0, (float(Session.vote.get("endsAt", 0)) - Net.now_ms()) / 1000.0)
 	var maps: Array = Session.vote.get("maps", ["old_dorm", "night_hospital", "night_mall"])
-	var available: Array = Session.vote.get("available", ["old_dorm"])
+	var available: Array = Session.vote.get("available", maps)
 	var counts: Dictionary = Session.vote.get("counts", {})
 	for i: int in maps.size():
 		var id: String = str(maps[i])
@@ -849,17 +938,27 @@ func _build_vote() -> void:
 	var x0: float = (1334.0 - shown * 92.0 + 12.0) / 2.0
 	for i: int in shown:
 		var p: Dictionary = players[i]
-		var slot: Panel = _panel(Vector2(x0 + i * 92, 510), Vector2(80, 96), "panel/panel_room_code_cell")
+		var slot: Panel = _panel(Vector2(x0 + i * 92, 548), Vector2(80, 100), "panel/panel_room_code_cell")
 		slot.add_child(_avatar(p, Vector2(6, 6), 68))
-		slot.add_child(_label(str(p.get("nickname", "玩家")).left(4), Vector2(0, 72), Vector2(80, 22), 13, UiAssets.COLOR_TEXT, true))
+		slot.add_child(_label(str(p.get("nickname", "玩家")).left(4), Vector2(0, 74), Vector2(80, 22), 14, UiAssets.COLOR_TEXT, true))
 		if str(p.get("id", "")) in voters:
-			var badge: Panel = _panel(Vector2(22, -22), Vector2(70, 30), "button/tab_active")
-			var badge_text: Label = _label("投了!", Vector2(0, 0), Vector2(70, 30), 16, UiAssets.COLOR_DARK_TEXT, true)
+			# Pill sits fully above the slot so nothing clips it.
+			var badge: Panel = Panel.new()
+			badge.position = Vector2(8, -34)
+			badge.size = Vector2(64, 28)
+			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var pill: StyleBoxFlat = StyleBoxFlat.new()
+			pill.bg_color = UiAssets.COLOR_GOLD
+			pill.border_color = Color("140e28")
+			pill.set_border_width_all(2)
+			pill.set_corner_radius_all(14)
+			badge.add_theme_stylebox_override("panel", pill)
+			var badge_text: Label = _label("✓ 投了", Vector2.ZERO, Vector2(64, 28), 14, UiAssets.COLOR_DARK_TEXT, true)
 			badge_text.add_theme_constant_override("outline_size", 0)
 			badge.add_child(badge_text)
 			slot.add_child(badge)
 		_add(slot)
-	_add(_label("点击地图卡投票，可以改票 · 票数最高的地图将被选中", Vector2(0, 640), Vector2(1334, 30), FS_BODY, UiAssets.COLOR_TEXT, true))
+	_add(_label("✦ 选择你想探索的地图 · 可以改票 · 票数最高的地图将被选中 ✦", Vector2(0, 676), Vector2(1334, 30), FS_BODY, UiAssets.COLOR_TEXT, true))
 
 # ---------------------------------------------------------------- 12 角色分配
 
@@ -994,14 +1093,19 @@ func _build_result() -> void:
 	var my_role: String = str(me.get("role", Session.role()))
 	panel.add_child(_label("个人得分 · %s%s" % [ROLE_INFO.get(my_role, ROLE_INFO.hider).name, "（已被抓）" if me.get("caught", false) else ""], Vector2(36, 22), Vector2(540, 32), 22, UiAssets.COLOR_GOLD))
 	var y: float = 64.0
-	var breakdown: Array = me.get("breakdown", [])
-	if breakdown.is_empty():
-		panel.add_child(_label("本局没有得分项", Vector2(36, y), Vector2(540, 36), FS_BODY, UiAssets.COLOR_MUTED))
-		y += 40
+	# Earned items first, then the role's other ways to score greyed at +0 so the list
+	# always fills five rows and teaches what else counts.
+	var breakdown: Array = me.get("breakdown", []).duplicate()
+	var earned: Array = breakdown.map(func(e: Dictionary) -> String: return str(e.get("label", "")))
+	for label: String in SCORE_ITEMS.get(my_role, SCORE_ITEMS.hider):
+		if breakdown.size() >= 5: break
+		if not label in earned: breakdown.append({"label": label, "pts": 0})
 	for entry: Dictionary in breakdown.slice(0, 5):
+		var zero: bool = int(entry.get("pts", 0)) == 0
 		var row: Panel = _panel(Vector2(30, y), Vector2(546, 44), "panel/panel_score_row")
-		row.add_child(_label(str(entry.get("label", "")), Vector2(20, 0), Vector2(360, 44), FS_BODY, UiAssets.COLOR_TEXT))
-		var pts: Label = _label("%+d" % int(entry.get("pts", 0)), Vector2(380, 0), Vector2(146, 44), 22, UiAssets.COLOR_GOLD)
+		if zero: row.modulate = Color(1, 1, 1, 0.5)
+		row.add_child(_label(str(entry.get("label", "")), Vector2(20, 0), Vector2(360, 44), FS_BODY, UiAssets.COLOR_MUTED if zero else UiAssets.COLOR_TEXT))
+		var pts: Label = _label("%+d" % int(entry.get("pts", 0)), Vector2(380, 0), Vector2(146, 44), 22, UiAssets.COLOR_MUTED if zero else UiAssets.COLOR_GOLD)
 		pts.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(pts)
 		panel.add_child(row)
@@ -1134,7 +1238,7 @@ func _build_settings() -> void:
 	var pct: Label = _label("%d%%" % int(float(Config.settings.volume) * 100), Vector2(300, 84), Vector2(70, 40), 18, UiAssets.COLOR_GOLD)
 	pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	sound.add_child(pct)
-	sound.add_child(_slider(Vector2(110, 90), Vector2(190, 30), float(Config.settings.volume) * 100, func(value: float) -> void:
+	sound.add_child(_slider(Vector2(110, 82), Vector2(190, 44), float(Config.settings.volume) * 100, func(value: float) -> void:
 		Config.settings.volume = value / 100.0
 		pct.text = "%d%%" % int(value)
 		Audio.apply_settings()
@@ -1144,7 +1248,7 @@ func _build_settings() -> void:
 		var y: float = 150 + i * 92
 		var key: String = str(rows[i][1])
 		sound.add_child(_label(str(rows[i][0]), Vector2(30, y), Vector2(250, 32), FS_BODY, UiAssets.COLOR_TEXT))
-		sound.add_child(_label(str(rows[i][2]), Vector2(30, y + 32), Vector2(260, 24), 14, UiAssets.COLOR_MUTED))
+		sound.add_child(_label(str(rows[i][2]), Vector2(30, y + 32), Vector2(260, 24), FS_SMALL, UiAssets.COLOR_MUTED))
 		sound.add_child(_toggle(Vector2(290, y + 6), bool(Config.settings[key]), func(value: bool) -> void:
 			Config.settings[key] = value
 			Config.save()))
@@ -1156,14 +1260,17 @@ func _build_settings() -> void:
 		Config.save()
 		show_page(19)))
 	gfx.add_child(_label("左手模式", Vector2(30, 216), Vector2(250, 32), FS_BODY, UiAssets.COLOR_TEXT))
-	gfx.add_child(_label("交换摇杆与按钮位置", Vector2(30, 248), Vector2(260, 24), 14, UiAssets.COLOR_MUTED))
+	gfx.add_child(_label("交换摇杆与按钮位置", Vector2(30, 248), Vector2(260, 24), FS_SMALL, UiAssets.COLOR_MUTED))
 	gfx.add_child(_toggle(Vector2(290, 222), bool(Config.settings.left_hand), func(value: bool) -> void:
 		Config.settings.left_hand = value
 		Config.save()))
 	gfx.add_child(UiAssets.picture("hud/hud-joystick-base", Vector2(40, 310) if not Config.settings.left_hand else Vector2(250, 310), Vector2(110, 110)))
 	gfx.add_child(UiAssets.picture("hud/hud-btn-main-interact", Vector2(250, 316) if not Config.settings.left_hand else Vector2(40, 316), Vector2(100, 100)))
-	gfx.add_child(_label("按钮布局预览", Vector2(0, 430), Vector2(398, 26), FS_SMALL, UiAssets.COLOR_MUTED, true))
-	gfx.add_child(_label("设置自动保存", Vector2(0, 500), Vector2(398, 26), FS_SMALL, UiAssets.COLOR_MUTED, true))
+	gfx.add_child(_label("按钮布局预览", Vector2(0, 422), Vector2(398, 26), FS_SMALL, UiAssets.COLOR_MUTED, true))
+	var layout: Button = _button("自定义布局", Vector2(84, 456), Vector2(230, 56), Color("38345e"), 20)
+	layout.pressed.connect(func() -> void: show_toast("自定义按钮布局即将开放"))
+	gfx.add_child(layout)
+	gfx.add_child(_label("设置自动保存", Vector2(0, 516), Vector2(398, 26), FS_SMALL, UiAssets.COLOR_MUTED, true))
 	# Column 3: account.
 	var acct: Panel = panels[2]
 	var user: Dictionary = Session.user
@@ -1181,17 +1288,44 @@ func _build_settings() -> void:
 		acct.add_child(UiAssets.picture(str(binds[i][0]), Vector2(30, y + 8), Vector2(40, 40)))
 		acct.add_child(_label(str(binds[i][1]), Vector2(82, y), Vector2(156, 56), FS_BODY, UiAssets.COLOR_TEXT))
 		var bound: bool = bool(binds[i][2])
-		var bind: Button = _button("已绑定" if bound else "去绑定", Vector2(244, y + 4), Vector2(124, 50), Color("38345e") if bound else UiAssets.COLOR_GREEN, 20)
-		bind.disabled = bound
-		bind.pressed.connect(binds[i][3])
-		acct.add_child(bind)
-	var out: Button = _button("退出登录", Vector2(30, 460), Vector2(338, 72), UiAssets.COLOR_RED, 26, "icon/exit-icon")
-	out.pressed.connect(func() -> void: Session.logout())
+		if bound:
+			# A status, not a control: green tick text.
+			var done: Label = _label("✓ 已绑定", Vector2(244, y), Vector2(124, 56), 20, UiAssets.COLOR_GREEN, true)
+			acct.add_child(done)
+		else:
+			var bind: Button = _button("去绑定", Vector2(244, y + 4), Vector2(124, 50), UiAssets.COLOR_GREEN, 20)
+			bind.pressed.connect(binds[i][3])
+			acct.add_child(bind)
+	var out: Button = _button("退出登录", Vector2(30, 440), Vector2(338, 68), UiAssets.COLOR_RED, 26, "icon/exit-icon")
+	out.pressed.connect(func() -> void:
+		_confirm("退出登录？", "退出后需要重新登录，本机的设置会保留。", "退出登录", func() -> void: Session.logout()))
 	acct.add_child(out)
-	var debug: Button = _button("v" + Config.VERSION, Vector2(8, 700), Vector2(84, 40), Color("2a2350"), 14)
-	debug.modulate.a = 0.35
+	# Version sits in the account panel; tapping it opens the server debug panel.
+	var debug: Button = _link_button("版本 v" + Config.VERSION, Vector2(0, 512), Vector2(398, 32))
+	debug.add_theme_color_override("font_color", UiAssets.COLOR_MUTED)
 	debug.pressed.connect(_show_server_debug)
-	_add(debug)
+	acct.add_child(debug)
+
+## Yes / no dialog over the current page; `on_ok` runs after the dialog closes.
+func _confirm(title: String, message: String, ok_text: String, on_ok: Callable) -> void:
+	var veil: ColorRect = ColorRect.new()
+	veil.color = Color(0.02, 0.01, 0.06, 0.7)
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_add(veil)
+	var panel: Panel = _panel(Vector2(367, 235), Vector2(600, 280), "panel/panel_modal")
+	veil.add_child(panel)
+	panel.add_child(_title_label(title, Vector2(0, 26), Vector2(600, 50), 32, UiAssets.COLOR_GOLD, true))
+	var text: Label = _label(message, Vector2(50, 88), Vector2(500, 70), FS_BODY, UiAssets.COLOR_TEXT, true)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(text)
+	var cancel: Button = _button("取消", Vector2(50, 180), Vector2(230, 66), Color("38345e"), 24)
+	cancel.pressed.connect(veil.queue_free)
+	panel.add_child(cancel)
+	var ok: Button = _button(ok_text, Vector2(320, 180), Vector2(230, 66), UiAssets.COLOR_RED, 24)
+	ok.pressed.connect(func() -> void:
+		veil.queue_free()
+		on_ok.call())
+	panel.add_child(ok)
 
 # ---------------------------------------------------------------- 账号绑定 / 找回密码
 
@@ -1576,6 +1710,33 @@ func _card_button(pos: Vector2, size: Vector2, chosen: bool) -> Button:
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	return b
 
+## Selected-state overlay for a card: 4px gold frame plus a 28px gold check badge top-right.
+func _selected_ring(size: Vector2) -> Control:
+	var ring: Panel = Panel.new()
+	ring.size = size
+	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var frame: StyleBoxFlat = StyleBoxFlat.new()
+	frame.bg_color = Color(0, 0, 0, 0)
+	frame.border_color = UiAssets.COLOR_GOLD
+	frame.set_border_width_all(4)
+	frame.set_corner_radius_all(12)
+	ring.add_theme_stylebox_override("panel", frame)
+	var badge: Panel = Panel.new()
+	badge.position = Vector2(size.x - 34, 6)
+	badge.size = Vector2(28, 28)
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var dot: StyleBoxFlat = StyleBoxFlat.new()
+	dot.bg_color = UiAssets.COLOR_GOLD
+	dot.border_color = Color("140e28")
+	dot.set_border_width_all(2)
+	dot.set_corner_radius_all(14)
+	badge.add_theme_stylebox_override("panel", dot)
+	var tick: Label = _label("✓", Vector2.ZERO, Vector2(28, 28), 18, UiAssets.COLOR_DARK_TEXT, true)
+	tick.remove_theme_constant_override("outline_size")
+	badge.add_child(tick)
+	ring.add_child(badge)
+	return ring
+
 ## Icon above a small caption, for the lobby's bottom navigation.
 func _nav_button(text: String, icon: String, pos: Vector2, size: Vector2) -> Button:
 	var b: Button = Button.new()
@@ -1583,9 +1744,17 @@ func _nav_button(text: String, icon: String, pos: Vector2, size: Vector2) -> But
 	b.position = pos
 	b.size = size
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	b.add_child(UiAssets.picture(icon, Vector2((size.x - 48) / 2, 4), Vector2(48, 48)))
-	b.add_child(_label(text, Vector2(0, 52), Vector2(size.x, 28), 18, UiAssets.COLOR_TEXT, true))
+	b.add_child(UiAssets.picture(icon, Vector2((size.x - 56) / 2, 0), Vector2(56, 56)))
+	b.add_child(_label(text, Vector2(0, 54), Vector2(size.x, 28), 18, UiAssets.COLOR_TEXT, true))
 	return b
+
+func _underline(pos: Vector2, width: float) -> ColorRect:
+	var line: ColorRect = ColorRect.new()
+	line.position = pos
+	line.size = Vector2(width, 2)
+	line.color = UiAssets.COLOR_GOLD
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return line
 
 func _link_button(text: String, pos: Vector2, size: Vector2) -> Button:
 	var b: Button = Button.new()
@@ -1612,8 +1781,10 @@ func _label(text: String, pos: Vector2, size: Vector2, font_size: int, color: Co
 	l.add_theme_constant_override("outline_size", 4)
 	return l
 
-## Large pixel-font label for titles, timers and big numbers.
+## Large pixel-font label for titles, timers and big numbers. Fusion Pixel is drawn on a
+## 12px grid, so the size snaps to a multiple of 12 (24/36/48/60…) to keep strokes even.
 func _title_label(text: String, pos: Vector2, size: Vector2, font_size: int, color: Color, centered: bool = false) -> Label:
+	font_size = maxi(24, roundi(font_size / 12.0) * 12)
 	var l: Label = _label(text, pos, size, font_size, color, centered)
 	l.add_theme_font_override("font", UiAssets.pixel_font())
 	l.add_theme_color_override("font_outline_color", Color("140e28"))
@@ -1702,7 +1873,7 @@ func _slider(pos: Vector2, size: Vector2, value: float, on_change: Callable) -> 
 	s.add_theme_stylebox_override("slider", UiAssets.tex_style("button/slider_track", UiAssets.button(Color("2c2552")), Vector2(12, 6), Vector2(0, 5)))
 	s.add_theme_stylebox_override("grabber_area", UiAssets.tex_style("button/slider_fill", UiAssets.button(UiAssets.COLOR_GOLD), Vector2(12, 6), Vector2(0, 5)))
 	s.add_theme_stylebox_override("grabber_area_highlight", UiAssets.tex_style("button/slider_fill", UiAssets.button(UiAssets.COLOR_GOLD), Vector2(12, 6), Vector2(0, 5)))
-	var knob: Texture2D = _scaled_icon("button/slider_knob", 30)
+	var knob: Texture2D = _scaled_icon("button/slider_knob", 36)
 	if knob:
 		s.add_theme_icon_override("grabber", knob)
 		s.add_theme_icon_override("grabber_highlight", knob)
@@ -1717,7 +1888,9 @@ func _progress(pos: Vector2, size: Vector2, ratio: float) -> Control:
 	frame.add_theme_stylebox_override("panel", UiAssets.tex_style("button/progress_bar_frame", UiAssets.button(Color("2c2552")), Vector2(14, 8), Vector2.ZERO))
 	var fill: Panel = Panel.new()
 	fill.position = Vector2(4, 4)
-	fill.size = Vector2(maxf(0, (size.x - 8) * clampf(ratio, 0, 1)), size.y - 8)
+	# The fill art needs >20px for its two 10px end caps; any progress at all shows at least 30px.
+	var fill_w: float = (size.x - 8) * clampf(ratio, 0, 1)
+	fill.size = Vector2(maxf(fill_w, 30.0) if ratio > 0 else 0.0, size.y - 8)
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fill.add_theme_stylebox_override("panel", UiAssets.tex_style("button/progress_bar_fill", UiAssets.button(UiAssets.COLOR_GOLD), Vector2(10, 4), Vector2.ZERO))
 	frame.add_child(fill)
@@ -1830,7 +2003,7 @@ func prepare_debug_shot(name: String) -> void:
 		players.append({"id":"demo" if i == 0 else "bot_%d" % i, "nickname":"小夜猫" if i == 0 else "AI-%d" % i, "color":UiAssets.HIDER_COLORS[(i + 5) % 8], "ready":i != 0, "isHost":i == 0, "isBot":i != 0})
 	Session.room = {"code":"483921", "hostId":"demo", "players":players, "phase":"waiting", "settings":room_settings}
 	Session.match_status = {"elapsedSec":65, "found":8, "needed":12, "canAiFill":true}
-	Session.vote = {"maps":["old_dorm","night_hospital","night_mall"], "available":["old_dorm"], "counts":{"old_dorm":5}, "voters":["bot_1","bot_2","bot_3","bot_5","bot_6"], "endsAt":Net.now_ms() + 8000}
+	Session.vote = {"maps":["old_dorm","night_hospital","night_mall"], "available":["old_dorm","night_hospital","night_mall"], "counts":{"old_dorm":3,"night_hospital":2}, "voters":["bot_1","bot_2","bot_3","bot_5","bot_6"], "endsAt":Net.now_ms() + 8000}
 	join_code = "6281"
 	if page == 1:
 		notice = {"title":"宿舍公告", "body":"欢迎来到熄灯！

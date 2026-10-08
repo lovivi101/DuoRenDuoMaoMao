@@ -610,10 +610,34 @@ func _draw() -> void:
 		var screen: Vector2 = world.screen_position(Vector2(float(p.x),float(p.y)))
 		screen = get_global_transform_with_canvas().affine_inverse()*screen
 		if not Rect2(35,35,1264,680).has_point(screen):
-			var at: Vector2 = screen.clamp(Vector2(35,170),Vector2(1299,480))
-			var angle: float = (screen-Vector2(667,375)).angle()
-			var triangle: PackedVector2Array = PackedVector2Array([at+Vector2(14,0).rotated(angle),at+Vector2(-8,-8).rotated(angle),at+Vector2(-8,8).rotated(angle)])
-			draw_colored_polygon(triangle,UiAssets.COLOR_GOLD)
+			_edge_marker(screen, p.has("r"), bool(p.get("hunter", false)))
+
+## Off-screen sound / supply drop: a 64px half-disc hugging the screen edge (a full disc with
+## a pointer when it is above or below the play area), ripple or star icon inside; fades
+## with distance so far-away noises stay quiet.
+func _edge_marker(screen: Vector2, is_sound: bool, from_hunter: bool) -> void:
+	# Safe spots that avoid the HUD: side edges between the top panels and the thumb
+	# controls, the top band under the timer, the bottom band between joystick and buttons.
+	var at: Vector2
+	if screen.y < 160:
+		at = Vector2(clampf(screen.x,380,1040),160)
+	elif screen.y > 470 and screen.x > 240 and screen.x < 1060:
+		at = Vector2(clampf(screen.x,300,900),690)
+	else:
+		at = Vector2(0.0 if screen.x < 667 else 1334.0,clampf(screen.y,180,470))
+	var angle: float = (screen-Vector2(667,375)).angle()
+	var alpha: float = clampf(1.25 - (screen-Vector2(667,375)).length()/1800.0, 0.35, 1.0)
+	var rim: Color = (UiAssets.COLOR_RED if from_hunter else UiAssets.COLOR_GOLD) if is_sound else Color("68bde6")
+	var on_side: bool = at.x <= 0.0 or at.x >= 1334.0
+	var inward: Vector2 = Vector2(-signf(at.x-667),0) if on_side else Vector2.ZERO
+	draw_circle(at,32,Color(.06,.05,.14,.78*alpha))
+	draw_arc(at,32,0,TAU,40,Color(rim,alpha),3)
+	if not on_side:
+		var tip: Vector2 = at+Vector2(44,0).rotated(angle)
+		draw_colored_polygon(PackedVector2Array([tip,at+Vector2(32,-9).rotated(angle),at+Vector2(32,9).rotated(angle)]),Color(rim,alpha))
+	var icon: Texture2D = UiAssets.asset("icon/ripple-icon" if is_sound else "icon/star-icon")
+	var c: Vector2 = at+inward*15
+	if icon: draw_texture_rect(icon,Rect2(c-Vector2(16,16),Vector2(32,32)),false,Color(rim.lightened(.3),alpha))
 
 func _button(text: String, pos: Vector2, extent: Vector2, color: Color) -> Button:
 	var b: Button = Button.new()
