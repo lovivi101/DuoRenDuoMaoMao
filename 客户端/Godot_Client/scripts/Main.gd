@@ -760,7 +760,7 @@ func _build_waiting() -> void:
 		var ready: bool = bool(p.get("ready", false))
 		card.add_child(_label("✓ 已准备" if ready else "等待中", Vector2(0, 152), Vector2(190, 26), 18, UiAssets.COLOR_GREEN if ready else UiAssets.COLOR_MUTED, true))
 		if Session.is_host() and p.get("isBot", false):
-			var kick: Button = _icon_button("icon/close-icon", Vector2(146, 10), Vector2(34, 34), Color("38345e"))
+			var kick: Button = _icon_button("icon/close-icon", Vector2(138, 8), Vector2(44, 44), Color("38345e"))
 			for state: String in ["normal", "hover", "pressed"]:
 				kick.add_theme_stylebox_override(state, UiAssets.tex_style("button/button_round_icon", UiAssets.button(Color("38345e")), Vector2(12, 12), Vector2(4, 4), Color(1.2, 1.2, 1.2) if state == "hover" else Color.WHITE))
 			kick.tooltip_text = "踢出"
@@ -853,8 +853,8 @@ func _build_vote() -> void:
 		slot.add_child(_avatar(p, Vector2(6, 6), 68))
 		slot.add_child(_label(str(p.get("nickname", "玩家")).left(4), Vector2(0, 72), Vector2(80, 22), 13, UiAssets.COLOR_TEXT, true))
 		if str(p.get("id", "")) in voters:
-			var badge: Panel = _panel(Vector2(34, -12), Vector2(56, 26), "button/tab_active")
-			var badge_text: Label = _label("投了!", Vector2(0, 0), Vector2(56, 26), 13, UiAssets.COLOR_DARK_TEXT, true)
+			var badge: Panel = _panel(Vector2(22, -22), Vector2(70, 30), "button/tab_active")
+			var badge_text: Label = _label("投了!", Vector2(0, 0), Vector2(70, 30), 16, UiAssets.COLOR_DARK_TEXT, true)
 			badge_text.add_theme_constant_override("outline_size", 0)
 			badge.add_child(badge_text)
 			slot.add_child(badge)
