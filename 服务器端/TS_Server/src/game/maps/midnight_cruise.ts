@@ -23,14 +23,18 @@ export function createMidnightCruise():GameMap{
   [3,9,'life_ring'],[28,2,'life_ring'],[47,10,'life_ring'],[66,9,'life_ring'],[14,9,'rope_coil'],[53,3,'rope_coil'],[36,6,'barrel'],
   [4,24,'barrel'],[5,30,'barrel'],[65,25,'barrel'],[11,18,'suitcase'],[25,30,'suitcase'],[39,19,'suitcase'],[53,29,'suitcase'],
   [18,21,'suitcase'],[46,28,'cardboard_box'],[32,17,'chair'],[60,31,'trash_can'],[67,31,'rope_coil'],
+  // One more piece of luggage or gear per cabin, plus deck clutter.
+  [13,20,'barrel'],[20,17,'chair'],[27,21,'suitcase'],[34,18,'rope_coil'],[41,17,'barrel'],[48,21,'suitcase'],[55,18,'chair'],[59,17,'life_ring'],
+  [10,28,'suitcase'],[17,31,'barrel'],[24,28,'chair'],[31,31,'suitcase'],[38,28,'rope_coil'],[45,31,'barrel'],[52,28,'suitcase'],[59,28,'chair'],
+  [9,8,'deck_chair'],[20,9,'barrel'],[43,3,'deck_chair'],[57,7,'rope_coil'],[60,10,'life_ring'],[24,4,'deck_chair'],
  ];
  const portals=[...portalPair('hatch_1','hatch',[4,12],[4,16],1,3),...portalPair('hatch_2','hatch',[20,12],[20,24],1,3),
   ...portalPair('hatch_3','hatch',[48,12],[48,25],1,3),...portalPair('hatch_4','hatch',[65,12],[65,16],1,3)];
  return finish({id:'midnight_cruise',theme:'cruise',grid:g,
   zones:[{name:'甲板',x:1,y:1,w:68,h:12,floor:'deck'},{name:'船舱',x:1,y:16,w:68,h:17,floor:'cabin'}],
   hunterSpawn:center(34,10),cage:center(36,10),
-  hiderSpawns:[center(11,19),center(18,29),center(25,19),center(32,29),center(39,20),center(46,30),center(53,19),center(58,29),center(3,26),center(66,22),center(34,6)],
-  generators:[center(3,31),center(66,31),center(33,6)],
+  hiderSpawns:[center(11,19),center(18,29),center(25,19),center(32,29),center(39,20),center(46,30),center(53,19),center(58,29),center(3,26),center(66,22),center(25,29)],
+  generators:[center(3,31),center(66,31),center(64,3)],
   itemSpots:[center(10,3),center(60,5),center(33,7),center(12,21),center(26,28),center(41,21),center(54,28),center(3,22),center(66,27),center(20,25),center(50,24),center(36,2)],
   props,furniture,portals,
   decor:[{x:15,y:3,kind:'puddle'},{x:44,y:9,kind:'puddle'},{x:27,y:24,kind:'papers'},{x:10,y:31,kind:'laundry_basket'}],
