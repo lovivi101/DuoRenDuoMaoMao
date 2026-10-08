@@ -2,11 +2,12 @@ import {randomInt,randomUUID} from 'node:crypto';
 import type {Room,Settings,Player} from '../types.js';
 import {CONFIG} from '../game/config.js';
 import {createGame} from '../game/engine.js';
+import {MAP_IDS} from '../game/maps/index.js';
 export const defaultSettings:Settings={map:'old_dorm',durationSec:600,hunterCount:'auto',moleEnabled:false,voiceEnabled:false,aiFill:true,maxPlayers:12};
 export function validateSettings(value:unknown,base=defaultSettings):Settings{
  if(value!==undefined&&(typeof value!=='object'||value===null||Array.isArray(value)))throw Error('BAD_SETTINGS');
  const s={...base,...(value as Partial<Settings>??{})};
- if(!['old_dorm','random'].includes(s.map)||![300,480,600].includes(s.durationSec)||!['auto',1,2].includes(s.hunterCount)||!Number.isInteger(s.maxPlayers)||s.maxPlayers<8||s.maxPlayers>12||![s.moleEnabled,s.voiceEnabled,s.aiFill].every(x=>typeof x==='boolean'))throw Error('BAD_SETTINGS');
+ if(![...MAP_IDS,'random'].includes(s.map)||![300,480,600].includes(s.durationSec)||!['auto',1,2].includes(s.hunterCount)||!Number.isInteger(s.maxPlayers)||s.maxPlayers<8||s.maxPlayers>12||![s.moleEnabled,s.voiceEnabled,s.aiFill].every(x=>typeof x==='boolean'))throw Error('BAD_SETTINGS');
  return {map:s.map,durationSec:s.durationSec,hunterCount:s.hunterCount,moleEnabled:s.moleEnabled,voiceEnabled:s.voiceEnabled,aiFill:s.aiFill,maxPlayers:s.maxPlayers};
 }
 export class Lobby {
@@ -48,11 +49,16 @@ export class Lobby {
  const target=Math.max(8,this.minPlayers);
  while(r.players.length<target&&r.settings.aiFill)this.addBot(r);
  if(r.players.length<this.minPlayers)throw Error('NOT_ENOUGH');
+ // Three candidates: the host's pick first (unless random), the rest drawn from the other maps.
+ const others=MAP_IDS.filter(id=>id!==r.settings.map).sort(()=>Math.random()-.5);
+ r.voteMaps=[...(r.settings.map==='random'?[]:[r.settings.map]),...others].slice(0,3);
  r.phase='voting';r.votes.clear();r.voteEndsAt=this.clock()+CONFIG.voteSec*1000;return r;
  }
- start(r:Room){ // called once after voting
+ // Most votes wins; ties and empty votes fall back to candidate order (host's pick first).
+ voteWinner(r:Room){const maps=r.voteMaps??['old_dorm'],count=(id:string)=>[...r.votes.values()].filter(v=>v===id).length;return maps.reduce((best,id)=>count(id)>count(best)?id:best,maps[0])}
+ start(r:Room,mapId=this.voteWinner(r)){ // called once after voting
  if(!['waiting','voting'].includes(r.phase))throw Error('ROOM_BUSY');
- r.game=createGame(r.code,r.players,r.settings.durationSec,r.settings.hunterCount,r.settings.moleEnabled,{now:this.clock(),lastHunters:r.lastHunters});
+ r.game=createGame(r.code,r.players,r.settings.durationSec,r.settings.hunterCount,r.settings.moleEnabled,{now:this.clock(),lastHunters:r.lastHunters,mapId});
  r.lastHunters=r.game.players.filter(p=>p.role==='hunter').map(p=>p.id);r.phase='playing';r.resultSent=false;return r;
  }
  reset(r:Room){r.phase='waiting';r.game=undefined;r.resultSent=false;r.votes.clear();for(const p of r.players)p.ready=p.isBot}

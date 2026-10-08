@@ -12,6 +12,8 @@ function floor(g:Grid,ox:number,furniture:GameMap['furniture']){
  for(const x of [9,17,25]){g.vline(ox+x,1,8);g.vline(ox+x,22,30)}
  for(const [a,b] of [[1,8],[10,16],[18,24],[26,33]]){const mid=ox+Math.floor((a+b)/2);g.doors([mid,9],[mid+1,9],[mid,21],[mid+1,21])}
  g.fill(ox+12,11,10,9,T.atrium);
+ // Kiosks on the walkway ring: sight-blocking cover so the open ring is not one long sightline.
+ for(const [x,y] of [[4,16],[8,11],[28,11],[24,17]])g.fill(ox+x,y,2,2,T.shelf);
  // Display racks inside shops.
  for(const [x,y] of [[3,4],[12,4],[20,5],[4,26],[12,25],[20,26],[28,25]]){g.fill(ox+x,y,3,1,T.furniture);furniture.push({x:ox+x,y,w:3,h:1,kind:'clothes_rack'})}
 }

@@ -5,12 +5,12 @@ import {safeUser,verifyToken} from '../auth.js';
 import type {GameMessage,Player,Room,User} from '../types.js';
 import {Lobby,validateSettings} from '../lobby/lobby.js';
 import {lookOf} from '../economy.js';
+// ~8 kHz 8-bit μ-law chunks of 100 ms arrive base64 encoded (~1.1 KB each).
+const VOICE={range:8,perSecond:15,maxChars:4000};
 import {action,ghostSide,mark,matchRecord,rewardsFor,setInput,setOnline,snapshotFor,tickGame} from '../game/engine.js';
 import {wireMap} from '../game/maps/old_dorm.js';
 import {visible} from '../game/vision.js';
 import {CONFIG} from '../game/config.js';
-// The vote shows the design doc's first three maps; only the implemented one can be picked.
-const VOTE_MAPS={maps:['old_dorm','night_hospital','night_mall'],available:['old_dorm']};
 export class Hub {
  wss=new WebSocketServer({noServer:true,maxPayload:16384});
  sockets=new Map<string,WebSocket>();lobby:Lobby;private timer?:NodeJS.Timeout;private lastStatus=0;
@@ -29,10 +29,23 @@ export class Hub {
  }
  status=(id:string):'online'|'in_game'|'offline'=>this.sockets.has(id)?(this.lobby.roomOf(id)?.phase==='playing'?'in_game':'online'):'offline';
  send(id:string,m:unknown){const ws=this.sockets.get(id);if(ws?.readyState===WebSocket.OPEN){if(ws.bufferedAmount>1024*1024){ws.close(1013,'slow client');return}ws.send(JSON.stringify(m))}}
+ // 近距离语音 (design §11.4): only in rooms with voice on; in a match only players within
+ // VOICE.range hear a speaker (hunters included), louder when closer; ghosts and caged
+ // players are heard only by each other so the caught cannot call out the hunter.
+ private voiceBudget=new Map<string,{at:number;count:number}>();
+ voice(r:Room,id:string,m:Record<string,unknown>){
+ if(!r.settings.voiceEnabled||typeof m.d!=='string'||m.d.length>VOICE.maxChars)return;
+ const now=this.clock();let b=this.voiceBudget.get(id);if(!b||now-b.at>=1000){b={at:now,count:0};this.voiceBudget.set(id,b)}if(++b.count>VOICE.perSecond)return;
+ const g=r.game,out=(to:string,vol:number)=>{if(to!==id)this.send(to,{t:'voice',from:id,d:m.d,vol:+vol.toFixed(2)})};
+ if(!g||g.phase==='result'||g.phase==='waiting'){for(const p of r.players)if(!p.isBot)out(p.id,1);return}
+ const sp=g.players.find(p=>p.id===id);if(!sp)return;const muted=(p:typeof sp)=>p.state==='ghost'||p.caged;
+ for(const p of g.players){if(p.isBot||muted(p)!==muted(sp))continue;const d=Math.hypot(p.x-sp.x,p.y-sp.y);if(d<=VOICE.range)out(p.id,1-d/VOICE.range*.8)}
+ }
  broadcast(r:Room,m:unknown){for(const p of r.players)this.send(p.id,m)}
  state(r:Room){const m={t:'room.state',code:r.code,hostId:r.hostId,settings:r.settings,phase:r.phase,players:r.players.map(p=>({...p,isHost:p.id===r.hostId}))};this.broadcast(r,m);return m}
  private player(u:User):Player{return {id:u.id,nickname:u.nickname,color:u.color,ready:false,isBot:false,isHost:false,online:true,look:lookOf(u)}}
- private vote(r:Room){this.state(r);this.broadcast(r,{t:'vote.start',...VOTE_MAPS,endsAt:r.voteEndsAt})}
+ private voteStart(r:Room){const maps=r.voteMaps??['old_dorm'];return {t:'vote.start',maps,available:maps,endsAt:r.voteEndsAt}}
+ private vote(r:Room){this.state(r);this.broadcast(r,this.voteStart(r))}
  private startFor(r:Room,id:string){
  const g=r.game;if(!g)return;const p=g.players.find(p=>p.id===id);if(!p)return;
  const allies=p.role==='hunter'||p.role==='mole'?g.players.filter(q=>q.id!==id&&(q.role==='hunter'||q.role==='mole')).map(q=>({id:q.id,role:q.role})):[];
@@ -50,7 +63,7 @@ export class Hub {
  this.disconnected.delete(u.id);
  if(r){const p=r.players.find(p=>p.id===u.id);if(p)p.online=true;if(g)setOnline(g,u.id,true)}
  this.send(u.id,{t:'hello',user:safeUser(u),serverNow:this.clock(),...(r&&within?{reconnect:{roomCode:r.code}}:{})});
- if(r){this.state(r);if(g)this.startFor(r,u.id);else if(r.phase==='voting')this.send(u.id,{t:'vote.start',...VOTE_MAPS,endsAt:r.voteEndsAt})}
+ if(r){this.state(r);if(g)this.startFor(r,u.id);else if(r.phase==='voting')this.send(u.id,this.voteStart(r))}
  let lastSecond=this.clock(),count=0,pongAt=this.clock();
  ws.on('pong',()=>{pongAt=this.clock()});
  const heartbeat=setInterval(()=>{if(this.clock()-pongAt>30000){ws.terminate();return}ws.ping()},10000);heartbeat.unref();
@@ -83,6 +96,7 @@ export class Hub {
  if(r.game){setOnline(r.game,id,false);const p=r.game.players.find(p=>p.id===id);if(p)p.disconnectedAt=r.game.now-CONFIG.reconnectSec*1000}
  this.lobby.leave(r.code,id);this.send(id,{t:'room.left',reason:'leave'});this.state(r);return;
  }
+ if(m.t==='voice'){this.voice(r,id,m);return}
  if(m.t==='room.ready'){waiting();if(typeof m.ready!=='boolean')throw Error('BAD_MESSAGE');r.players.find(p=>p.id===id)!.ready=m.ready;this.state(r);return}
  if(m.t==='room.settings'){host();waiting();const s=validateSettings(m.settings,r.settings);if(s.maxPlayers<r.players.length)throw Error('ROOM_FULL');r.settings=s;this.state(r);return}
  if(m.t==='room.addBot'){host();waiting();this.lobby.addBot(r);this.state(r);return}
@@ -95,7 +109,7 @@ export class Hub {
  if(!this.store.friends(id).some(f=>f.id===m.friendId))throw Error('NOT_FRIEND');
  if(!this.sockets.has(String(m.friendId)))throw Error('FRIEND_OFFLINE');this.send(String(m.friendId),{t:'invite',from:safeUser(user),code:r.code});return;
  }
- if(m.t==='vote.cast'){if(r.phase!=='voting'||m.mapId!=='old_dorm')throw Error('BAD_VOTE');r.votes.set(id,'old_dorm');this.broadcast(r,{t:'vote.update',counts:{old_dorm:r.votes.size},voters:[...r.votes.keys()]});return}
+ if(m.t==='vote.cast'){const mapId=String(m.mapId);if(r.phase!=='voting'||!(r.voteMaps??[]).includes(mapId))throw Error('BAD_VOTE');r.votes.set(id,mapId);const counts:Record<string,number>={};for(const v of r.votes.values())counts[v]=(counts[v]??0)+1;this.broadcast(r,{t:'vote.update',counts,voters:[...r.votes.keys()]});return}
  if(m.t==='room.again'){
  // A caller can request a rematch during the result screen. Reset the shared
  // room immediately so all clients receive the waiting state and can ready up.
@@ -126,7 +140,7 @@ export class Hub {
  const r=this.lobby.roomOf(id);if(r&&!r.game){this.lobby.leave(r.code,id);this.state(r)}this.disconnected.delete(id);
  }
  for(const r of this.lobby.rooms.values()){
- if(r.phase==='voting'&&now>=r.voteEndsAt){try{this.lobby.start(r);this.broadcast(r,{t:'vote.result',mapId:'old_dorm'});this.state(r);for(const p of r.players)this.startFor(r,p.id)}catch(e){r.phase='waiting';this.broadcast(r,{t:'error',code:'HUNTER_ROTATION',msg:'人数或猎手设置无法满足轮换，请调整房间人数'});this.state(r)}}
+ if(r.phase==='voting'&&now>=r.voteEndsAt){try{const mapId=this.lobby.voteWinner(r);this.lobby.start(r,mapId);this.broadcast(r,{t:'vote.result',mapId});this.state(r);for(const p of r.players)this.startFor(r,p.id)}catch(e){r.phase='waiting';this.broadcast(r,{t:'error',code:'HUNTER_ROTATION',msg:'人数或猎手设置无法满足轮换，请调整房间人数'});this.state(r)}}
  if(r.game){
  tickGame(r.game,now);this.flush(r);
  if(r.game.phase==='waiting'){this.lobby.reset(r);this.state(r)}

@@ -95,7 +95,7 @@ function move(g:GameState,p:GamePlayer,dt:number){
  if(ghost){p.x=Math.max(.4,Math.min(g.map.w-.4,nx));p.y=Math.max(.4,Math.min(g.map.h-.4,ny))}
  else{if(validMove(nx,p.y,g.map))p.x=nx;if(validMove(p.x,ny,g.map))p.y=ny}
  if(!ghost&&distance(p,old)>.001){
- if(p.running&&g.now-p.lastRunRipple>=RULES.runRippleSec*1000){ripple(g,p,'run',hunter,p.id);g.footprints.push({x:p.x,y:p.y,dir:p.dir,until:g.now+RULES.footprintSec*1000,hunter});p.lastRunRipple=g.now}
+ if(p.running&&g.now-p.lastRunRipple>=RULES.runRippleSec*1000){ripple(g,p,'run',hunter,p.id);g.footprints.push({x:p.x,y:p.y,dir:p.dir,until:g.now+RULES.footprintSec*1000,hunter,style:p.look?.footprint});p.lastRunRipple=g.now}
  const oldTile=Math.floor(old.y)*g.map.w+Math.floor(old.x),tile=Math.floor(p.y)*g.map.w+Math.floor(p.x);
  if(tile!==oldTile&&g.map.tiles[tile]===3)ripple(g,p,'door',hunter,p.id);
  }
@@ -189,7 +189,7 @@ export function snapshotFor(g:GameState,id:string){
  you:{x:p.x,y:p.y,dir:p.dir,state:p.state,stamina:p.stamina,items:p.items,prop:p.prop,flashlight:p.flashlight,visionRadius:visionRadius(g,p),ghostSide:p.ghostSide,caged:p.caged,rescued:p.rescued,ghostChoiceEndsAt:p.chooseUntil,cold:+(1-mechanicsSpeed(g,p)).toFixed(2),ackSeq:p.input.seq,cooldowns:{ghostSkill:Math.max(0,(p.ghostReadyAt-g.now)/1000),report:Math.max(0,(p.reportReadyAt-g.now)/1000)},progress:p.interact?{kind:p.interact.kind,value:p.interact.value}:null},
  players:players.map(q=>({id:q.id,x:q.x,y:q.y,dir:q.dir,state:q.state,prop:q.state==='disguised'?q.prop:null,running:q.running})),
  ripples:g.ripples.map(({x,y,r,kind,hunter})=>({x,y,r,kind,hunter})),
- footprints:g.footprints.filter(f=>visible(g,p,f)).map(({x,y,dir})=>({x,y,dir})),
+ footprints:g.footprints.filter(f=>visible(g,p,f)).map(({x,y,dir,style})=>({x,y,dir,style:style??'plain'})),
  generators:g.generators.map(({id,x,y,progress,fixed})=>({id,x,y,progress,fixed})),
  marks:marks.map(m=>{const t=m.targetId?g.players.find(q=>q.id===m.targetId):null;return {x:t?.x??m.x,y:t?.y??m.y,kind:m.kind,until:m.until}})};
 }

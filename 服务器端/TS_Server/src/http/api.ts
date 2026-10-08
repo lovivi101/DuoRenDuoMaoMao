@@ -5,6 +5,7 @@ import type {User} from '../types.js';
 import {COLORS} from '../types.js';
 import {hashPassword,safeUser,signToken,verifyPassword,verifyToken} from '../auth.js';
 import {CONFIG} from '../game/config.js';
+import {CATALOG,EconomyError,buy,claim,economyMessages,equip,lookOf,owned,tasksView,type Slot} from '../economy.js';
 export class ApiError extends Error {constructor(public code:string,public status=400){super(code)}}
 const need=(v:unknown,code='BAD_REQUEST')=>{if(!v)throw new ApiError(code)};
 const str=(v:unknown)=>typeof v==='string'?v:'';
@@ -61,6 +62,12 @@ export class Api {
  if(method==='POST'&&path==='/api/auth/wechat'){
  const openid=await this.wechat(b.code);let u=store.findWechat(openid);const isNew=!u;u??=store.create('wechat',openid);return this.logged(u,isNew);
  }
+ // Forgot password: an SMS code to the bound phone sets a new password (account login keeps working).
+ if(method==='POST'&&path==='/api/auth/password/reset'){
+ const password=str(b.password);need(password.length>=6&&password.length<=32,'ACCOUNT_INVALID');
+ this.consumeSms(b.phone,b.code);const u=store.findPhone(str(b.phone));need(u?.bindings.account,'NO_ACCOUNT');
+ const c=await hashPassword(password);u!.salt=c.salt;u!.passwordHash=c.hash;store.saveUser(u!);return {ok:true,account:u!.bindings.account};
+ }
  if(method==='POST'&&path==='/api/auth/guest'){
  need(typeof b.deviceId==='string'&&b.deviceId.length>=4&&b.deviceId.length<=128,'BAD_REQUEST');
  let u=store.findDevice(str(b.deviceId));const isNew=!u;u??=store.create('guest',str(b.deviceId));return this.logged(u,isNew);
@@ -83,6 +90,20 @@ export class Api {
  const openid=await this.wechat(b.code),existing=store.findWechat(openid);need(!existing||existing.id===user.id,'ACCOUNT_EXISTS');
  user.bindings.wechat=true;user.wechatOpenid=openid;store.saveUser(user);return {ok:true,user:safeUser(user)};
  }
+ // Guests / phone / WeChat users can add an account + password login.
+ if(method==='POST'&&path==='/api/bind/account'){
+ const account=str(b.account),password=str(b.password);need(!user.bindings.account,'ACCOUNT_EXISTS');
+ need(/^[A-Za-z0-9_]{4,20}$/.test(account)&&password.length>=6&&password.length<=32,'ACCOUNT_INVALID');need(!store.findAccount(account),'ACCOUNT_EXISTS');
+ const c=await hashPassword(password);user.bindings.account=account;user.salt=c.salt;user.passwordHash=c.hash;store.saveUser(user);return {ok:true,user:safeUser(user)};
+ }
+ const slot=str(b.slot) as Slot,id=str(b.id);
+ const economy=(fn:()=>void)=>{try{fn()}catch(e){if(e instanceof EconomyError)throw new ApiError(e.code);throw e}store.saveUser(user);return {ok:true,user:safeUser(user)}};
+ if(method==='GET'&&path==='/api/shop'){const have=owned(user);return {ok:true,items:CATALOG.map(i=>({...i,owned:have.has(i.slot+':'+i.id)})),look:lookOf(user),coins:user.coins,gems:user.gems}}
+ if(method==='POST'&&path==='/api/shop/buy')return economy(()=>buy(user,slot,id));
+ if(method==='POST'&&path==='/api/wardrobe/equip')return economy(()=>equip(user,slot,id));
+ if(method==='GET'&&path==='/api/tasks'){const tasks=tasksView(user,this.clock());store.saveUser(user);return {ok:true,tasks}}
+ if(method==='POST'&&path==='/api/tasks/claim'){const r=economy(()=>claim(user,id,this.clock()));return {...r,tasks:tasksView(user,this.clock())}}
+ if(method==='GET'&&path==='/api/records')return {ok:true,records:store.records(user.id,20),stats:safeUser(user).stats};
  throw new ApiError('NOT_FOUND',404);
  }
  async handle(req:IncomingMessage,res:ServerResponse){
@@ -104,4 +125,4 @@ export class Api {
  }catch(e){const x=e instanceof ApiError?e:new ApiError('INTERNAL_ERROR',500);if(x.status===500)console.error(e instanceof Error?e.message:'server error');send({ok:false,code:x.code,msg:messages[x.code]||x.code},x.status)}
  }
 }
-const messages:Record<string,string>={PHONE_INVALID:'手机号无效',SMS_TOO_FREQUENT:'验证码发送过于频繁',SMS_CODE_WRONG:'验证码错误或已失效',ACCOUNT_EXISTS:'账号或绑定已存在',ACCOUNT_INVALID:'账号或密码格式无效',PASSWORD_WRONG:'账号或密码错误',NICKNAME_INVALID:'昵称需为 2–12 字',UNAUTHORIZED:'请重新登录',NOT_FOUND:'未找到',BAD_REQUEST:'请求参数无效'};
+const messages:Record<string,string>={...economyMessages,NO_ACCOUNT:'该手机号未绑定账号，请直接用验证码登录',PHONE_INVALID:'手机号无效',SMS_TOO_FREQUENT:'验证码发送过于频繁',SMS_CODE_WRONG:'验证码错误或已失效',ACCOUNT_EXISTS:'账号或绑定已存在',ACCOUNT_INVALID:'账号或密码格式无效',PASSWORD_WRONG:'账号或密码错误',NICKNAME_INVALID:'昵称需为 2–12 字',UNAUTHORIZED:'请重新登录',NOT_FOUND:'未找到',BAD_REQUEST:'请求参数无效'};

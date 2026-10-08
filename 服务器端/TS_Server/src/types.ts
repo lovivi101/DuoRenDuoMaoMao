@@ -14,7 +14,7 @@ export interface Player {id:string;nickname:string;color:Color;ready:boolean;isB
 export interface Input {seq:number;mx:number;my:number;run:boolean;at:number}
 export interface Mark extends Pos {kind:string;until:number;audience:'hider'|'hunter'|'all';targetId?:string;by?:string}
 export interface Ripple extends Pos {r:number;kind:string;until:number;hunter:boolean;by?:string;credited?:boolean}
-export interface Footprint extends Pos {dir:number;until:number;hunter:boolean}
+export interface Footprint extends Pos {dir:number;until:number;hunter:boolean;style?:string}
 export interface Generator extends Pos {id:number;progress:number;fixed:boolean;participants:Set<string>;lastRipple:number}
 export interface Drop extends Pos {id:string;item:string;stage:'warn'|'landed'|'taken';at:number}
 export interface GamePlayer extends Player,Pos {
@@ -55,4 +55,4 @@ export interface GameState {
  outbox:GameMessage[];winner?:'hider'|'hunter';voided:boolean;result?:Result;random:()=>number;
 }
 export interface Result {winner:'hider'|'hunter';players:{id:string;nickname:string;color:Color;role:Role;score:number;breakdown:{label:string;pts:number}[];caught:boolean}[];mvp:{hider:string|null;hunter:string|null};voided?:boolean}
-export interface Room {code:string;hostId:string;settings:Settings;phase:'waiting'|'voting'|'playing'|'result';players:Player[];createdAt:number;game?:GameState;resultSent?:boolean;lastHunters:string[];votes:Map<string,string>;voteEndsAt:number}
+export interface Room {code:string;hostId:string;settings:Settings;phase:'waiting'|'voting'|'playing'|'result';players:Player[];createdAt:number;game?:GameState;resultSent?:boolean;lastHunters:string[];votes:Map<string,string>;voteEndsAt:number;voteMaps?:string[]}

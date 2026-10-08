@@ -9,6 +9,8 @@ import {distance,validMove} from './vision.js';
 export const MECH={monitorRange:1.5,monitorCooldownMs:2500,xrayMarkMs:1000,xrayCooldownMs:10000,
  deckVision:9,blizzardVision:1.5,snowPrintMs:15000,snowStepMs:500,coldRampSec:20,coldMaxSlow:.3,fireRange:3,fireSeen:12,
  broadcastFakes:5};
+// Development-only override for balance runs, e.g. MECH_TUNE='{"deckVision":7}'.
+if(process.env.NODE_ENV!=='production'&&process.env.MECH_TUNE)Object.assign(MECH,JSON.parse(process.env.MECH_TUNE));
 
 const tile=(p:Pos)=>({x:Math.floor(p.x),y:Math.floor(p.y)});
 export const outdoors=(g:GameState,p:Pos)=>!!g.map.mechanics?.indoor&&!g.map.mechanics.indoor.some(r=>inRect(p,r));
@@ -104,7 +106,7 @@ function snow(g:GameState){
   p.outdoorSince=out?(p.outdoorSince??g.now):null;
   // Walking on snow leaves prints too (running already does, everywhere).
   const moving=Math.hypot(p.input.mx,p.input.my)>0&&g.now-p.input.at<=500&&g.now>=p.stunnedUntil;
-  if(out&&moving&&!p.running&&g.now-(snowStep.get(p)??-Infinity)>=MECH.snowStepMs){g.footprints.push({x:p.x,y:p.y,dir:p.dir,until:g.now+MECH.snowPrintMs,hunter:p.role==='hunter'});snowStep.set(p,g.now)}
+  if(out&&moving&&!p.running&&g.now-(snowStep.get(p)??-Infinity)>=MECH.snowStepMs){g.footprints.push({x:p.x,y:p.y,dir:p.dir,until:g.now+MECH.snowPrintMs,hunter:p.role==='hunter',style:p.look?.footprint});snowStep.set(p,g.now)}
  }
  // Prints on snow last 15 s instead of 3 s.
  for(const f of g.footprints)if(f.until-g.now<=RULES.footprintSec*1000+60&&f.until-g.now>RULES.footprintSec*1000-60&&outdoors(g,f))f.until=g.now+MECH.snowPrintMs;
