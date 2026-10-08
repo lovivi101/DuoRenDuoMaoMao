@@ -94,6 +94,14 @@ func startup_check() -> void:
 		Net.connect_session()
 		await refresh_me()
 
+## Stretch a full-page background past the 1334x750 design canvas to the real screen edges.
+func _bleed(node: Control) -> void:
+	var view: Vector2 = get_viewport_rect().size
+	var k: float = maxf(canvas.scale.x, 0.001)
+	node.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	node.position = -canvas.position / k
+	node.size = view / k
+
 func _fit_canvas() -> void:
 	if not is_instance_valid(canvas): return
 	var viewport_size: Vector2 = get_viewport_rect().size
@@ -103,14 +111,24 @@ func _fit_canvas() -> void:
 	var scale_factor: float = minf(usable.x / 1334.0, usable.y / 750.0)
 	canvas.scale = Vector2.ONE * scale_factor
 	canvas.position = (viewport_size - Vector2(1334, 750) * scale_factor) * 0.5
+	if is_instance_valid(active_page):
+		for child: Node in active_page.get_children():
+			if child is ColorRect or (child is TextureRect and (child as TextureRect).stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_COVERED):
+				_bleed(child)
 
 func _process(delta: float) -> void:
+	if Router.current == 15 and is_instance_valid(active_page):
+		var hint: Label = active_page.find_child("GhostHint", true, false) as Label
+		if hint:
+			var left: int = maxi(0, ceili((float(Session.me().get("ghostChoiceEndsAt", 0)) - Net.now_ms()) / 1000.0))
+			hint.text = "出局不下线 · 选择你的幽灵阵营（%d 秒）" % (left if left > 0 and left <= 10 else 10)
 	if countdown > 0:
 		countdown -= delta
 		if is_instance_valid(active_page):
-			var label: Label = active_page.find_child("Countdown", true, false) as Label
-			if label:
-				label.text = "%02ds 后重发" % ceili(countdown)
+			var send_button: Button = active_page.find_child("SendCode", true, false) as Button
+			if send_button:
+				send_button.text = "%ds 后重发" % ceili(countdown) if countdown > 0.05 else "获取验证码"
+				send_button.disabled = countdown > 0.05
 			var timer: Label = active_page.find_child("Timer", true, false) as Label
 			if timer:
 				timer.text = "%ds" % ceili(countdown)
@@ -167,6 +185,7 @@ func _build_page(page: int) -> void:
 	bg.color = Color(0.03, 0.02, 0.08, 0.55) if page == 15 else UiAssets.bg_for(page)
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	active_page.add_child(bg)
+	_bleed(bg)
 	var bg_tex: Texture2D = UiAssets.asset("bg/" + str(PAGE_BACKGROUNDS.get(page, "")))
 	if bg_tex:
 		var backdrop: TextureRect = TextureRect.new()
@@ -177,12 +196,14 @@ func _build_page(page: int) -> void:
 		backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		active_page.add_child(backdrop)
+		_bleed(backdrop)
 		if page in DIMMED_PAGES:
 			var dim: ColorRect = ColorRect.new()
 			dim.color = Color(0.03, 0.02, 0.08, 0.45)
 			dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			active_page.add_child(dim)
+			_bleed(dim)
 	match page:
 		1: _build_splash()
 		2: _build_login()
@@ -229,7 +250,14 @@ func _show_notice() -> void:
 	var modal: Panel = _panel(Vector2(860, 110) if Router.current == 1 else Vector2(417, 170), Vector2(420, 330), "panel/panel_modal")
 	modal.name = "Notice"
 	_add(modal)
+	modal.add_child(UiAssets.picture("icon/notice-icon", Vector2(84, 34), Vector2(38, 38)))
 	modal.add_child(_title_label(str(notice.get("title", "公告")), Vector2(0, 28), Vector2(420, 50), 30, UiAssets.COLOR_GOLD, true))
+	var close: Button = _icon_button("icon/close-icon", Vector2(356, 18), Vector2(48, 48), Color("38345e"))
+	close.pressed.connect(func() -> void:
+		notice = {}
+		modal.queue_free()
+		_leave_splash())
+	modal.add_child(close)
 	var body: Label = _label(str(notice.get("body", "")), Vector2(40, 100), Vector2(340, 120), FS_BODY, UiAssets.COLOR_TEXT, true)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	modal.add_child(body)
@@ -276,11 +304,17 @@ func _build_login() -> void:
 	var account: Button = _button("账号密码登录", Vector2(302, 232), Vector2(238, 72), Color("7047b9"), FS_BUTTON, "icon/lock-icon")
 	account.pressed.connect(func() -> void: if _consented(): Router.go(4))
 	panel.add_child(account)
-	var guest: Button = _button("游客体验", Vector2(50, 320), Vector2(490, 66), Color("38345e"), FS_BUTTON, "icon/user-icon")
+	var guest: Button = _button("游客体验", Vector2(150, 322), Vector2(290, 56), Color("38345e"), 20, "icon/user-icon")
 	guest.pressed.connect(_guest_login)
 	panel.add_child(guest)
 	consent_box = CheckBox.new()
-	consent_box.text = "我已阅读并同意《用户协议》和《隐私政策》"
+	consent_box.text = "我已阅读并同意"
+	for i: int in 2:
+		var link: Button = _link_button(["《用户协议》", "《隐私政策》"][i], Vector2(268 + i * 130, 410), Vector2(126, 44))
+		link.add_theme_font_size_override("font_size", 17)
+		link.add_theme_color_override("font_color", Color("8fc4ff"))
+		link.pressed.connect(func() -> void: _show_agreement(i))
+		panel.add_child(link)
 	consent_box.position = Vector2(50, 410)
 	consent_box.size = Vector2(490, 44)
 	consent_box.button_pressed = Session.consent
@@ -294,6 +328,23 @@ func _build_login() -> void:
 	panel.add_child(consent_box)
 	if not notice.is_empty():
 		_show_notice()
+
+func _show_agreement(which: int) -> void:
+	var veil: ColorRect = ColorRect.new()
+	veil.color = Color(0.02, 0.01, 0.06, 0.72)
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_add(veil)
+	var panel: Panel = _panel(Vector2(267, 80), Vector2(800, 590), "panel/panel_modal")
+	veil.add_child(panel)
+	panel.add_child(_title_label(["用户协议", "隐私政策"][which], Vector2(0, 24), Vector2(800, 50), 32, UiAssets.COLOR_GOLD, true))
+	var text: Label = _label(["欢迎来到《熄灯》。使用本游戏即表示你同意：遵守游戏规则与社区公约，不使用外挂、不恶意中途退出、不在语音中发表违法或骚扰内容；账号仅限本人使用；虚拟道具（金币、钻石、装扮）仅在游戏内使用，不可兑换现金。\n\n我们可能因违规行为限制账号功能。正式上线前本协议将由运营方发布完整版本。",
+		"我们只收集提供服务所必需的信息：账号标识（微信 OpenID / 手机号 / 账号名）、昵称与对局数据。手机号仅用于登录与找回密码，展示时会脱敏；近距离语音只做实时转发，服务器不录音、不存储。\n\n你可以在设置中解绑或注销账号。正式上线前本政策将由运营方发布完整版本。"][which], Vector2(50, 96), Vector2(700, 380), FS_BODY, UiAssets.COLOR_TEXT)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	panel.add_child(text)
+	var ok: Button = _button("我知道了", Vector2(280, 500), Vector2(240, 64), UiAssets.COLOR_GOLD, 24)
+	ok.pressed.connect(veil.queue_free)
+	panel.add_child(ok)
 
 func _consented() -> bool:
 	if Session.consent: return true
@@ -328,21 +379,28 @@ func _build_sms() -> void:
 	panel.add_child(_title_label("熄灯", Vector2(0, 26), Vector2(620, 60), 44, UiAssets.COLOR_GOLD, true))
 	panel.add_child(_label("一条验证码，送你回宿舍", Vector2(0, 90), Vector2(620, 28), FS_SMALL, UiAssets.COLOR_MUTED, true))
 	panel.add_child(_field_icon("icon/phone-icon", Vector2(50, 152)))
-	panel.add_child(_label("+86", Vector2(100, 150), Vector2(60, 64), FS_BODY, UiAssets.COLOR_TEXT))
-	phone_edit = _edit("请输入手机号", Vector2(160, 146), Vector2(410, 70))
+	panel.add_child(_label("手机号", Vector2(96, 146), Vector2(90, 70), FS_BODY, UiAssets.COLOR_TEXT))
+	phone_edit = _edit("请输入手机号", Vector2(190, 146), Vector2(380, 70))
+	phone_edit.add_theme_constant_override("minimum_character_width", 0)
+	var prefix: Label = _label("+86", Vector2(22, 0), Vector2(46, 70), 18, UiAssets.COLOR_GOLD)
+	phone_edit.add_child(prefix)
+	(phone_edit.get_theme_stylebox("normal") as StyleBox).content_margin_left = 70
+	(phone_edit.get_theme_stylebox("focus") as StyleBox).content_margin_left = 70
 	phone_edit.max_length = 11
 	panel.add_child(phone_edit)
 	panel.add_child(_field_icon("icon/lock-icon", Vector2(50, 242)))
-	code_edit = _edit("请输入验证码", Vector2(100, 236), Vector2(270, 70))
+	panel.add_child(_label("验证码", Vector2(96, 236), Vector2(90, 70), FS_BODY, UiAssets.COLOR_TEXT))
+	code_edit = _edit("6 位数字", Vector2(190, 236), Vector2(180, 70))
 	code_edit.max_length = 6
 	panel.add_child(code_edit)
 	var send: Button = _button("获取验证码", Vector2(384, 236), Vector2(186, 70), UiAssets.COLOR_GOLD, 22)
+	send.name = "SendCode"
 	send.pressed.connect(_send_sms)
 	panel.add_child(send)
 	var countdown_label: Label = _label("", Vector2(384, 310), Vector2(186, 26), 15, UiAssets.COLOR_MUTED, true)
 	countdown_label.name = "Countdown"
 	panel.add_child(countdown_label)
-	var login: Button = _button("登 录", Vector2(50, 360), Vector2(520, 84), UiAssets.COLOR_GOLD, 32)
+	var login: Button = _button("登录", Vector2(50, 360), Vector2(520, 84), UiAssets.COLOR_GOLD, 32)
 	login.pressed.connect(_sms_login)
 	panel.add_child(login)
 	if OS.is_debug_build():
@@ -399,7 +457,7 @@ func _build_account() -> void:
 		forgot.pressed.connect(_forgot_password)
 		panel.add_child(forgot)
 		y += 44.0
-	var submit: Button = _button("注 册" if register_mode else "登 录", Vector2(60, y + 20), Vector2(500, 84), UiAssets.COLOR_GOLD, 32)
+	var submit: Button = _button("注册" if register_mode else "登录", Vector2(60, y + 20), Vector2(500, 84), UiAssets.COLOR_GOLD, 32)
 	submit.pressed.connect(_account_login)
 	panel.add_child(submit)
 	if register_mode:
@@ -630,7 +688,8 @@ func _build_join_room() -> void:
 		var b: Button = _button(k, Vector2(46 + (i % 3) * 180, 222 + (i / 3) * 70), Vector2(168, 60), Color("38345e"), 28 if k.is_valid_int() else 22)
 		b.pressed.connect(func() -> void: _keypad_press(k))
 		panel.add_child(b)
-	var join: Button = _button("加入房间  ▶", Vector2(46, 516), Vector2(528, 80), UiAssets.COLOR_GOLD, 30)
+	var join: Button = _button("加入房间  ▶", Vector2(46, 512), Vector2(528, 76), UiAssets.COLOR_GOLD, 30)
+	join.name = "JoinButton"
 	join.pressed.connect(_join_room)
 	panel.add_child(join)
 	_refresh_code_cells()
@@ -638,7 +697,11 @@ func _build_join_room() -> void:
 func _refresh_code_cells() -> void:
 	for i: int in code_cells.size():
 		if is_instance_valid(code_cells[i]):
-			code_cells[i].text = join_code[i] if i < join_code.length() else ""
+			code_cells[i].text = join_code[i] if i < join_code.length() else ("_" if i == join_code.length() else "")
+			(code_cells[i].get_parent() as Control).self_modulate = Color(1.4, 1.2, 0.6) if i == join_code.length() else Color.WHITE
+	var join_button: Button = active_page.find_child("JoinButton", true, false) as Button if is_instance_valid(active_page) else null
+	if join_button:
+		join_button.disabled = join_code.length() != 6
 
 func _keypad_press(key: String) -> void:
 	if key == "清空": join_code = ""
@@ -715,21 +778,22 @@ func _build_waiting() -> void:
 	var my_ready: bool = false
 	for p: Dictionary in players:
 		if p.get("id") == Session.user.get("id"): my_ready = bool(p.get("ready", false))
-	var invite: Button = _button("邀请好友", Vector2(70, 606), Vector2(250, 84), Color("7047b9"), 28, "icon/invite-icon")
+	var invite: Button = _button("邀请好友", Vector2(70, 612), Vector2(220, 72), Color("38345e"), 24, "icon/invite-icon")
 	invite.pressed.connect(func() -> void: Router.go(18))
 	_add(invite)
-	var ready_btn: Button = _button("取消准备" if my_ready else "准  备", Vector2(338, 606), Vector2(250, 84), Color("38345e") if my_ready else UiAssets.COLOR_GREEN, 28, "icon/check-icon")
-	ready_btn.pressed.connect(func() -> void: Net.send("room.ready", {"ready": not my_ready}))
-	_add(ready_btn)
-	var start: Button = _button("开始游戏  ▶", Vector2(606, 606), Vector2(320, 84), UiAssets.COLOR_GOLD, 32)
-	start.pressed.connect(func() -> void: Net.send("room.start"))
-	start.disabled = not Session.is_host()
-	_add(start)
 	if Session.is_host():
-		var add_ai: Button = _button("+ AI", Vector2(944, 606), Vector2(150, 84), Color("3959b8"), 26, "icon/robot-icon")
+		var start: Button = _button("开始游戏  ▶", Vector2(520, 604), Vector2(320, 88), UiAssets.COLOR_GOLD, 32)
+		start.pressed.connect(func() -> void: Net.send("room.start"))
+		_add(start)
+	else:
+		var ready_btn: Button = _button("取消准备" if my_ready else "准备", Vector2(520, 604), Vector2(320, 88), Color("38345e") if my_ready else UiAssets.COLOR_GOLD, 32, "icon/check-icon")
+		ready_btn.pressed.connect(func() -> void: Net.send("room.ready", {"ready": not my_ready}))
+		_add(ready_btn)
+	if Session.is_host():
+		var add_ai: Button = _button("+ AI", Vector2(310, 612), Vector2(190, 72), Color("38345e"), 24, "icon/robot-icon")
 		add_ai.pressed.connect(func() -> void: Net.send("room.addBot"))
 		_add(add_ai)
-	var leave: Button = _button("离开", Vector2(1112, 606), Vector2(162, 84), UiAssets.COLOR_RED, 26, "icon/exit-icon")
+	var leave: Button = _button("离开", Vector2(1124, 618), Vector2(150, 62), Color("38345e"), 22, "icon/exit-icon")
 	leave.pressed.connect(func() -> void: Net.send("room.leave"))
 	_add(leave)
 
@@ -822,6 +886,7 @@ func _build_role_reveal() -> void:
 		_add(back)
 	var info: Dictionary = ROLE_INFO.get(role, ROLE_INFO.hider)
 	var card: Panel = _panel(Vector2(200, 130), Vector2(380, 520), "button/card_role_front")
+	card.self_modulate = {"hider": Color(0.75, 0.9, 1.35), "hunter": Color(1.35, 0.7, 0.7), "mole": Color(1.15, 0.8, 1.35)}.get(role, Color.WHITE)
 	_add(card)
 	card.add_child(UiAssets.picture(str(info.art), Vector2(70, 30), Vector2(240, 240)))
 	card.add_child(_title_label(str(info.name), Vector2(0, 280), Vector2(380, 72), 64, info.color, true))
@@ -849,14 +914,18 @@ func _build_role_reveal() -> void:
 # ---------------------------------------------------------------- 15 幽灵阵营选择
 
 func _build_ghost() -> void:
-	var burst: TextureRect = UiAssets.picture("decor/decor-caught-burst", Vector2(467, 26), Vector2(400, 150))
+	var burst: TextureRect = UiAssets.picture("decor/decor-caught-burst", Vector2(417, 30), Vector2(500, 140))
+	burst.modulate = Color(1, 1, 1, 0.3)
 	if burst.texture: active_page.add_child(burst)
 	_add(_title_label("抓到了！", Vector2(0, 62), Vector2(1334, 80), 64, UiAssets.COLOR_RED, true))
-	_add(_label("出局不下线 · 选择你的幽灵阵营（10 秒内）", Vector2(0, 170), Vector2(1334, 34), 22, UiAssets.COLOR_TEXT, true))
+	var hint: Label = _label("出局不下线 · 选择你的幽灵阵营", Vector2(0, 170), Vector2(1334, 34), 22, UiAssets.COLOR_TEXT, true)
+	hint.name = "GhostHint"
+	_add(hint)
 	var sides: Array = [["守护灵", "制造一次假波纹，帮藏者误导猎手", "role/role-ghost-guardian", Color("7fb2ff"), "guardian"], ["怨灵", "标记一名藏者 2 秒，让猎手看见", "role/role-ghost-wraith", Color("d77cff"), "wraith"]]
 	for i: int in 2:
 		var side: Array = sides[i]
 		var card: Button = _card_button(Vector2(297 + i * 400, 226), Vector2(340, 440), false)
+		card.self_modulate = Color(0.75, 0.9, 1.35) if i == 0 else Color(1.2, 0.75, 1.35)
 		card.add_child(UiAssets.picture(str(side[2]), Vector2(70, 20), Vector2(200, 200)))
 		card.add_child(_title_label(str(side[0]), Vector2(0, 230), Vector2(340, 56), 44, side[3], true))
 		var desc: Label = _label(str(side[1]), Vector2(30, 294), Vector2(280, 56), 18, UiAssets.COLOR_TEXT, true)
@@ -891,6 +960,13 @@ func _build_result() -> void:
 	_add(_title_label("猎手胜利" if winner == "hunter" else "藏者胜利", Vector2(0, 32), Vector2(1334, 84), 64, UiAssets.COLOR_GOLD, true))
 	var players: Array = Session.result.get("players", [])
 	var mvp: Dictionary = Session.result.get("mvp", {})
+	# Personal outcome right under the banner: which side you were on and whether it won.
+	var mine: Dictionary = {}
+	for p: Dictionary in players:
+		if str(p.get("id", "")) == str(Session.user.get("id", "")): mine = p
+	var my_side: String = "hunter" if str(mine.get("role", Session.role())) in ["hunter", "mole"] else "hider"
+	var won: bool = my_side == winner
+	_add(_title_label("你赢了！" if won else "惜败，下局再来", Vector2(0, 134), Vector2(1334, 32), 26, UiAssets.COLOR_GOLD if won else Color("c9c4e6"), true))
 	var me: Dictionary = {}
 	for p: Dictionary in players:
 		if str(p.get("id", "")) == str(Session.user.get("id", "")): me = p
@@ -899,7 +975,8 @@ func _build_result() -> void:
 		var mvp_player: Dictionary = {}
 		for p: Dictionary in players:
 			if str(p.get("id", "")) == str(mvp.get(role, "")): mvp_player = p
-		var card: Panel = _panel(Vector2(46 + side * 944, 140), Vector2(298, 420), "panel/panel_player_card")
+		var card: Panel = _panel(Vector2(46 + side * 944, 170), Vector2(298, 412), "panel/panel_player_card")
+		card.self_modulate = Color(1.35, 0.72, 0.72) if side == 1 else Color(0.75, 0.9, 1.35)
 		_add(card)
 		card.add_child(_title_label("猎手阵营" if side == 1 else "藏者阵营", Vector2(0, 20), Vector2(298, 40), 28, UiAssets.COLOR_RED if side == 1 else Color("7fb2ff"), true))
 		var portrait: Dictionary = mvp_player.duplicate()
@@ -912,7 +989,7 @@ func _build_result() -> void:
 		card.add_child(_label("得分 %d" % int(mvp_player.get("score", 0)), Vector2(0, 356), Vector2(298, 32), 22, UiAssets.COLOR_GOLD, true))
 
 	# Centre: my score breakdown and rewards.
-	var panel: Panel = _panel(Vector2(364, 140), Vector2(606, 420))
+	var panel: Panel = _panel(Vector2(364, 170), Vector2(606, 412))
 	_add(panel)
 	var my_role: String = str(me.get("role", Session.role()))
 	panel.add_child(_label("个人得分 · %s%s" % [ROLE_INFO.get(my_role, ROLE_INFO.hider).name, "（已被抓）" if me.get("caught", false) else ""], Vector2(36, 22), Vector2(540, 32), 22, UiAssets.COLOR_GOLD))
@@ -956,6 +1033,7 @@ func _build_friends() -> void:
 	var panel: Panel = _panel(Vector2(40, 110), Vector2(820, 610))
 	_add(panel)
 	var search: LineEdit = _edit("输入好友 ID 添加", Vector2(30, 26), Vector2(560, 64))
+	panel.add_child(_label("我的 ID：%s（发给好友即可添加你）" % str(Session.user.get("shortId", "--------")), Vector2(400, 100), Vector2(390, 30), FS_SMALL, UiAssets.COLOR_GOLD))
 	panel.add_child(search)
 	var add: Button = _button("添加好友", Vector2(604, 26), Vector2(186, 64), UiAssets.COLOR_GOLD, 22, "icon/add-friend-icon")
 	add.pressed.connect(func() -> void: _add_friend(search.text.strip_edges()))
@@ -1001,7 +1079,9 @@ func _load_friends() -> void:
 	var friends: Array = response.get("friends", [])
 	if title: title.text = "好友列表（%d/50）" % friends.size()
 	if friends.is_empty():
-		list.add_child(_label("还没有好友，输入对方 ID 添加吧", Vector2.ZERO, Vector2(760, 44), FS_BODY, UiAssets.COLOR_MUTED))
+		var empty: Label = _label("还没有好友\n把你的 ID 发给朋友，或输入对方的 ID 添加", Vector2.ZERO, Vector2(760, 300), 22, UiAssets.COLOR_MUTED, true)
+		empty.custom_minimum_size = Vector2(760, 300)
+		list.add_child(empty)
 		return
 	var in_room: bool = not Session.room.is_empty()
 	for f: Dictionary in friends.slice(0, 6):
@@ -1173,11 +1253,11 @@ func _bind_wechat() -> void:
 		show_toast(str(response.get("msg", "绑定失败")))
 
 func _bind_phone() -> void:
-	_form_modal("绑定手机号", [["phone", "请输入手机号", false], ["code", "请输入验证码", false]], "绑 定", func(v: Dictionary) -> Dictionary:
+	_form_modal("绑定手机号", [["phone", "请输入手机号", false], ["code", "请输入验证码", false]], "绑定", func(v: Dictionary) -> Dictionary:
 		return _after_bind(await Api.request("/bind/phone", {"phone": v.phone, "code": v.code}), "手机号已绑定"))
 
 func _bind_account() -> void:
-	_form_modal("设置账号密码", [["account", "账号（4–20 位字母数字）", false], ["password", "密码（6–32 位）", true], ["confirm", "再次输入密码", true]], "保 存", func(v: Dictionary) -> Dictionary:
+	_form_modal("设置账号密码", [["account", "账号（4–20 位字母数字）", false], ["password", "密码（6–32 位）", true], ["confirm", "再次输入密码", true]], "保存", func(v: Dictionary) -> Dictionary:
 		if v.password != v.confirm:
 			return {"ok": false, "msg": "两次输入的密码不一致"}
 		return _after_bind(await Api.request("/bind/account", {"account": v.account, "password": v.password}), "账号密码已设置"))
@@ -1593,9 +1673,22 @@ func _toggle(pos: Vector2, value: bool, on_change: Callable) -> Control:
 	t.texture_pressed = on
 	t.ignore_texture_size = true
 	t.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-	t.position = pos
-	t.size = Vector2(84, 42)
+	t.position = pos - Vector2(4, 2)
+	t.size = Vector2(92, 46)
 	t.button_pressed = value
+	var state: Label = Label.new()
+	state.size = Vector2(46, 46)
+	state.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	state.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	state.add_theme_font_size_override("font_size", 16)
+	state.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var paint: Callable = func(on: bool) -> void:
+		state.text = "开" if on else "关"
+		state.position = Vector2(4, 0) if on else Vector2(44, 0)
+		state.add_theme_color_override("font_color", UiAssets.COLOR_DARK_TEXT if on else UiAssets.COLOR_TEXT)
+	paint.call(value)
+	t.toggled.connect(paint)
+	t.add_child(state)
 	t.toggled.connect(func(v: bool) -> void: on_change.call(v))
 	return t
 

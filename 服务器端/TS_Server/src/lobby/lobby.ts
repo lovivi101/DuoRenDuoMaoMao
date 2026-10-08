@@ -1,5 +1,6 @@
 import {randomInt,randomUUID} from 'node:crypto';
 import type {Room,Settings,Player} from '../types.js';
+import {COLORS} from '../types.js';
 import {CONFIG} from '../game/config.js';
 import {createGame} from '../game/engine.js';
 import {MAP_IDS} from '../game/maps/index.js';
@@ -36,7 +37,9 @@ export class Lobby {
  }
  addBot(r:Room){
  if(r.phase!=='waiting')throw Error('ROOM_BUSY');if(r.players.length>=r.settings.maxPlayers)throw Error('ROOM_FULL');
- const bot:Player={id:'bot_'+randomUUID(),nickname:'AI-'+(r.players.filter(p=>p.isBot).length+1),color:'green',ready:true,isBot:true,isHost:false,online:true};
+ // Bots take the first colour nobody in the room wears, so HUD avatars stay distinguishable.
+ const used=new Set(r.players.map(p=>p.color)),color=COLORS.find(c=>!used.has(c))??COLORS[r.players.length%COLORS.length];
+ const bot:Player={id:'bot_'+randomUUID(),nickname:'AI-'+(r.players.filter(p=>p.isBot).length+1),color,ready:true,isBot:true,isHost:false,online:true};
  r.players.push(bot);this.membership.set(bot.id,r.code);return bot;
  }
  beginVote(r:Room,quick=false){

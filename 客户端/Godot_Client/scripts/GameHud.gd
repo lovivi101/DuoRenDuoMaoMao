@@ -36,7 +36,23 @@ var exit_armed_until: int = 0
 var next_event_label: Label
 # Push-to-talk for 近距离语音 (visible only when the room enables voice).
 var talk_button: Button
-const NEXT_EVENT_RECT: Rect2 = Rect2(868,22,230,64)
+var final_label: Label
+var warn_strip: Label
+const NEXT_EVENT_RECT: Rect2 = Rect2(806,22,226,64)
+# Whole-map minimap (structure outline), rebuilt once per match.
+var minimap_tex: ImageTexture
+var hunt_seen_ms: int = -1
+var pause_panel: Panel
+# Dark rounded backing for small captions over the scene (button names, hints).
+static func caption_style() -> StyleBoxFlat:
+	var st: StyleBoxFlat = StyleBoxFlat.new()
+	st.bg_color = Color(0.05, 0.04, 0.12, 0.72)
+	st.set_corner_radius_all(8)
+	st.content_margin_left = 8
+	st.content_margin_right = 8
+	st.content_margin_top = 2
+	st.content_margin_bottom = 2
+	return st
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -54,8 +70,8 @@ func _build() -> void:
 	# The counter art and survivor dots are drawn in _draw (behind the button text), so the
 	# button itself is transparent; the text starts right of the art's people icon.
 	var clear: StyleBoxEmpty = StyleBoxEmpty.new()
-	clear.content_margin_left = 100
-	clear.content_margin_bottom = 30
+	clear.content_margin_left = 18
+	clear.content_margin_bottom = 40
 	for s: String in ["normal","hover","pressed"]:
 		alive_button.add_theme_stylebox_override(s,clear)
 	alive_button.add_theme_stylebox_override("focus",StyleBoxEmpty.new())
@@ -65,16 +81,28 @@ func _build() -> void:
 	alive_button.pressed.connect(_toggle_list)
 	timer_label = _label("05:00",Vector2(547,20),Vector2(240,70),40)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	event_label = _label("",Vector2(805,26),Vector2(270,62),24)
+	event_label = _label("",Vector2(487,102),Vector2(360,56),26)
 	event_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	event_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	event_label.add_theme_color_override("font_color",Color("ffe3e3"))
 	event_label.add_theme_color_override("font_outline_color",Color("3a0610"))
 	event_label.add_theme_constant_override("outline_size",6)
-	state_label = _label("",Vector2(30,118),Vector2(450,46),18)
+	state_label = _label("",Vector2(30,118),Vector2(450,40),18)
+	state_label.add_theme_stylebox_override("normal",caption_style())
+	state_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	final_label = _label("",Vector2(567,94),Vector2(200,30),20)
+	final_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	final_label.add_theme_color_override("font_color",Color("ff6b6b"))
+	final_label.add_theme_color_override("font_outline_color",Color("2a0508"))
+	final_label.add_theme_constant_override("outline_size",6)
+	warn_strip = _label("",Vector2(367,590),Vector2(600,46),22)
+	warn_strip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	warn_strip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	warn_strip.add_theme_color_override("font_color",Color("ffe3e3"))
 	next_event_label = _label("",NEXT_EVENT_RECT.position+Vector2(18,6),Vector2(196,30),18)
-	info_label = _label("",Vector2(335,655),Vector2(660,56),17)
+	info_label = _label("",Vector2(335,660),Vector2(660,44),18)
 	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	main_button = _button("交互\nSpace",mirror(Vector2(1160,565),Vector2(125,125)),Vector2(125,125),UiAssets.COLOR_GOLD)
 	main_button.button_down.connect(func() -> void: _main(true))
 	main_button.button_up.connect(func() -> void: _main(false))
@@ -101,25 +129,12 @@ func _build() -> void:
 	spectate_button = _button("切换观战",Vector2(550,585),Vector2(230,58),Color("869bde"))
 	spectate_button.pressed.connect(_spectate)
 	spectate_button.visible = false
-	var menu: Button = _button("退出",Vector2(28,196),Vector2(96,44),Color("635980"))
-	for s: String in ["normal","hover","pressed"]:
-		menu.add_theme_stylebox_override(s,UiAssets.tex_style("button/button_secondary_dark",UiAssets.button(Color("635980")),Vector2(16,12),Vector2(12,4),Color(0.8,0.8,0.8) if s == "pressed" else Color.WHITE))
-	menu.add_theme_stylebox_override("focus",StyleBoxEmpty.new())
-	menu.add_theme_color_override("font_outline_color",Color("140e28"))
-	menu.add_theme_constant_override("outline_size",4)
-	menu.pressed.connect(func() -> void:
-		if Time.get_ticks_msec() < exit_armed_until:
-			Router.toast("已退出本局")
-			Net.send("room.leave")
-		else:
-			exit_armed_until = Time.get_ticks_msec() + 3000
-			menu.text = "确认退出？"
-			menu.size = Vector2(150,44)
-			Router.toast("再点一次退出本局（中途退出会扣信誉分）")
-			get_tree().create_timer(3.0).timeout.connect(func() -> void:
-				if is_instance_valid(menu):
-					menu.text = "退出"
-					menu.size = Vector2(96,44)))
+	var pause: Button = _button("",Vector2(1046,24),Vector2(58,58),Color("38345e"))
+	for st: String in ["normal","hover","pressed"]:
+		pause.add_theme_stylebox_override(st,UiAssets.tex_style("button/button_round_icon",UiAssets.button(Color("38345e")),Vector2(14,14),Vector2(6,6),Color(0.8,0.8,0.8) if st == "pressed" else Color.WHITE))
+	pause.text = "II"
+	pause.add_theme_font_size_override("font_size",22)
+	pause.pressed.connect(_toggle_pause)
 	var mini: Button = Button.new()
 	mini.flat = true
 	mini.position = Vector2(1114,18)
@@ -169,7 +184,10 @@ func _skin(b: Button, asset_name: String) -> void:
 		cap.add_theme_font_size_override("font_size", 14)
 		cap.add_theme_color_override("font_color", UiAssets.COLOR_TEXT)
 		cap.add_theme_color_override("font_outline_color", Color("0c0a1a"))
-		cap.add_theme_constant_override("outline_size", 5)
+		cap.add_theme_constant_override("outline_size", 4)
+		cap.add_theme_stylebox_override("normal", caption_style())
+		cap.position = Vector2(b.size.x / 2 - 36, b.size.y - 14)
+		cap.size = Vector2(72, 24)
 		b.add_child(cap)
 		captions[b] = cap
 	b.text = ""
@@ -198,7 +216,15 @@ func _process(_delta: float) -> void:
 		alive_button.text = "存活 %d / %d"%[int(Session.snap.get("alive",0)),int(Session.snap.get("totalHiders",0))]
 	else:
 		alive_button.text = "存活 %d / %d"%[roster.filter(func(r: Dictionary) -> bool: return not r.get("caught",false)).size(),roster.size()]
-	state_label.text = "已抓 %d 人 · 手电 %s"%[int(Session.snap.get("caughtByMe",0)),"开" if me.get("flashlight",true) else "关"] if hunter else ("幽灵 · " + ("怨灵" if me.get("ghostSide") == "wraith" else "守护灵") if ghost else "藏者 · 轻推走路 / 外圈奔跑")
+	if Session.phase in ["hunt","final"] and hunt_seen_ms < 0:
+		hunt_seen_ms = Time.get_ticks_msec()
+	var early: bool = Session.phase == "hide" or (hunt_seen_ms >= 0 and Time.get_ticks_msec() - hunt_seen_ms < 20000)
+	state_label.text = "已抓 %d 人 · 手电 %s"%[int(Session.snap.get("caughtByMe",0)),"开" if me.get("flashlight",true) else "关"] if hunter else ("幽灵 · " + ("怨灵" if me.get("ghostSide") == "wraith" else "守护灵") if ghost else ("藏者 · 轻推走路，推到外圈奔跑" if early else ""))
+	state_label.visible = not state_label.text.is_empty()
+	state_label.size = Vector2(state_label.get_minimum_size().x, 40)
+	var final_now: bool = Session.phase == "final"
+	final_label.text = "最终 30 秒" if final_now and event_label.text.is_empty() else ""
+	warn_strip.text = ("猎手加速！小心心跳波纹！" if not hunter else "最终 30 秒：你的速度提高 20%！") if final_now else ""
 	_caption(main_button, "拍打\nSpace" if hunter else "交互\nSpace")
 	main_button.visible = not ghost
 	_caption(skill_button, "技能 %.0fs"%float(me.get("cooldowns",{}).get("ghostSkill",0)) if ghost else ("手电\nQ" if hunter else ("解除伪装\nQ" if state == "disguised" else "伪装\n按住 Q")))
@@ -390,6 +416,42 @@ func _spectate() -> void:
 	world.spectating = ids[(ids.find(world.spectating)+1)%ids.size()]
 	Router.toast("观战可见队友" if not world.spectating.is_empty() else "返回自身视角")
 
+## Pause menu: resume, or leave the match (a second, explicit button; leaving costs credit).
+func _toggle_pause() -> void:
+	if is_instance_valid(pause_panel):
+		pause_panel.queue_free()
+		return
+	pause_panel = Panel.new()
+	pause_panel.position = Vector2(517,230)
+	pause_panel.size = Vector2(300,250)
+	pause_panel.add_theme_stylebox_override("panel",UiAssets.tex_style("panel/panel_modal",UiAssets.panel(),Vector2(24,24),Vector2.ZERO))
+	add_child(pause_panel)
+	var title: Label = Label.new()
+	title.text = "暂停菜单"
+	title.position = Vector2(0,22)
+	title.size = Vector2(300,40)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size",26)
+	title.add_theme_color_override("font_color",UiAssets.COLOR_GOLD)
+	pause_panel.add_child(title)
+	for i: int in 2:
+		var b: Button = Button.new()
+		b.text = "继续游戏" if i == 0 else "退出本局（扣信誉分）"
+		b.position = Vector2(30,80+i*80)
+		b.size = Vector2(240,62)
+		b.add_theme_font_size_override("font_size",20 if i == 0 else 17)
+		var art: String = "button/button_primary_yellow" if i == 0 else "button/button_danger_red"
+		for st: String in ["normal","hover","pressed"]:
+			b.add_theme_stylebox_override(st,UiAssets.tex_style(art,UiAssets.button(UiAssets.COLOR_GOLD if i == 0 else UiAssets.COLOR_RED)))
+		b.add_theme_color_override("font_color",UiAssets.COLOR_DARK_TEXT if i == 0 else UiAssets.COLOR_TEXT)
+		b.pressed.connect(func() -> void:
+			if i == 0:
+				pause_panel.queue_free()
+			else:
+				Router.toast("已退出本局")
+				Net.send("room.leave"))
+		pause_panel.add_child(b)
+
 func _toggle_list() -> void:
 	if is_instance_valid(listed_panel):
 		listed_panel.queue_free()
@@ -453,7 +515,9 @@ func _draw() -> void:
 	var timer_frame: StyleBox = UiAssets.tex_style("hud/hud-timer-frame",StyleBoxEmpty.new(),Vector2(18,12),Vector2.ZERO)
 	# The frame art carries a clock on its left; widen it leftwards so the digits clear it.
 	draw_style_box(timer_frame,Rect2(timer_label.position-Vector2(62,2),timer_label.size+Vector2(72,6)))
-	draw_style_box(UiAssets.tex_style("hud/hud-survivor-counter",UiAssets.button(Color("786abe")),Vector2(18,14),Vector2.ZERO),Rect2(alive_button.position,alive_button.size))
+	draw_style_box(UiAssets.tex_style("panel/panel_top_resource_bar",UiAssets.button(Color("786abe")),Vector2(16,14),Vector2.ZERO),Rect2(alive_button.position,alive_button.size))
+	if not warn_strip.text.is_empty():
+		draw_style_box(UiAssets.tex_style("event/event-warning-banner",UiAssets.button(UiAssets.COLOR_RED),Vector2(24,12),Vector2.ZERO),Rect2(warn_strip.position-Vector2(10,4),warn_strip.size+Vector2(20,8)))
 	if not event_label.text.is_empty():
 		draw_style_box(UiAssets.tex_style("event/event-warning-banner",UiAssets.button(UiAssets.COLOR_RED),Vector2(24,12),Vector2.ZERO),Rect2(event_label.position-Vector2(10,4),event_label.size+Vector2(20,8)))
 	# Survivor row: a dot per hider, skulls for the caught ones.
@@ -463,16 +527,16 @@ func _draw() -> void:
 		for i: int in int(Session.snap.get("totalHiders",0)):
 			roster.append({"color":UiAssets.HIDER_COLORS[i%8],"caught":i >= int(Session.snap.get("alive",0))})
 	var shown: int = mini(roster.size(),12)
-	var step: float = minf(24.0,212.0/maxf(1.0,float(shown)))
+	var step: float = minf(34.0,296.0/maxf(1.0,float(shown)))
 	for i: int in shown:
-		var at: Vector2 = alive_button.position+Vector2(112+i*step,62)
+		var at: Vector2 = alive_button.position+Vector2(32+i*step,64)
 		var r: Dictionary = roster[i]
 		if r.get("caught",false):
-			if skull: draw_texture_rect(skull,Rect2(at-Vector2(10,10),Vector2(20,20)),false,Color(0.8,0.8,0.85))
+			if skull: draw_texture_rect(skull,Rect2(at-Vector2(13,13),Vector2(26,26)),false,Color(0.8,0.8,0.85))
 			else: draw_circle(at,10,Color(0.4,0.4,0.45))
 			continue
 		var face: Texture2D = UiAssets.asset("avatar/avatar-hider-"+str(r.get("color","blue")))
-		if face: draw_texture_rect(face,Rect2(at-Vector2(12,12),Vector2(24,24)),false)
+		if face: draw_texture_rect(face,Rect2(at-Vector2(15,15),Vector2(30,30)),false)
 		else: draw_circle(at,9,UiAssets.player_color(str(r.get("color","blue"))))
 	if next_event_label.visible:
 		draw_style_box(UiAssets.tex_style("panel/panel_top_resource_bar",UiAssets.button(Color("2c2552")),Vector2(16,14),Vector2.ZERO),NEXT_EVENT_RECT)
@@ -508,13 +572,23 @@ func _draw() -> void:
 	draw_style_box(UiAssets.tex_style("panel/panel_room_code_cell",UiAssets.panel(),Vector2(16,16),Vector2.ZERO),mini_rect)
 	draw_rect(mini_rect.grow(-7),Color(0.06,0.05,0.14,0.92))
 	if not world.map.is_empty():
-		var scale: Vector2 = Vector2(178.0/float(world.map.w),112.0/float(world.map.h))
-		var origin: Vector2 = mini_rect.position+Vector2(7,16)
+		var mw: float = float(world.map.w)
+		var mh: float = float(world.map.h)
+		var k: float = minf(178.0/mw,122.0/mh)
+		var scale: Vector2 = Vector2(k,k)
+		var origin: Vector2 = mini_rect.position+(mini_rect.size-Vector2(mw,mh)*k)/2.0
+		if minimap_tex == null:
+			var img: Image = Image.create(int(mw),int(mh),false,Image.FORMAT_RGBA8)
+			for y: int in int(mh):
+				for x: int in int(mw):
+					var t: int = world.tiles[y*int(mw)+x]
+					img.set_pixel(x,y,Color(0,0,0,0) if t == 5 else (Color("6f679f") if t in GameWorld.STRUCTURE else Color(0.13,0.12,0.24,1)))
+			minimap_tex = ImageTexture.create_from_image(img)
+		draw_texture_rect(minimap_tex,Rect2(origin,Vector2(mw,mh)*k),false)
 		for key: Vector2i in explored:
-			if key.x >= 0 and key.y >= 0 and key.x < int(world.map.w) and key.y < int(world.map.h):
-				var structure: bool = world.tiles[key.y*int(world.map.w)+key.x] in GameWorld.STRUCTURE
-				draw_rect(Rect2(origin+Vector2(key)*scale,scale),Color("8f86c4") if structure else Color(0.22,0.2,0.38,0.9))
-			draw_circle(origin+world.local_position*scale,3,Color.WHITE)
+			if key.x >= 0 and key.y >= 0 and key.x < int(mw) and key.y < int(mh) and not (world.tiles[key.y*int(mw)+key.x] in GameWorld.STRUCTURE):
+				draw_rect(Rect2(origin+Vector2(key)*scale,scale),Color(0.32,0.3,0.55,0.9))
+		draw_circle(origin+world.local_position*scale,3.5,Color.WHITE)
 		for gen: Dictionary in Session.snap.get("generators",[]):
 			draw_rect(Rect2(origin+Vector2(float(gen.x),float(gen.y))*scale-Vector2(2,2),Vector2(4,4)),UiAssets.COLOR_GOLD)
 		for drop: Dictionary in Session.drops:

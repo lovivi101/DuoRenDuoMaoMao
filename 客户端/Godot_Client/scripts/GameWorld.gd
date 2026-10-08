@@ -99,7 +99,7 @@ func _ready() -> void:
 	flashlight.color = Color("ffe6a4")
 	flashlight.energy = 0.85
 	add_child(flashlight)
-	camera.zoom = Vector2(1.6, 1.6)
+	camera.zoom = Vector2(2.4, 2.4)
 	add_child(camera)
 	var spawn: Dictionary = map.get("hunterSpawn", {"x":32,"y":20}) if Session.role() == "hunter" else map.get("hiderSpawns", [{"x":30,"y":22}])[0]
 	local_position = _xy(Session.me()) if not Session.me().is_empty() else _xy(spawn)
