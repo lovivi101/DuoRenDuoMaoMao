@@ -2,9 +2,15 @@ export const COLORS=['red','orange','yellow','green','cyan','blue','purple','pin
 export type Color=typeof COLORS[number];
 export type Role='hider'|'hunter'|'mole';
 export interface Pos {x:number;y:number}
-export interface User {id:string;shortId:string;nickname:string;color:Color;level:number;exp:number;coins:number;gems:number;rankScore:number;needsProfile:boolean;bindings:{wechat:boolean;phone:string|null;account:string|null};passwordHash?:string;salt?:string;wechatOpenid?:string;deviceId?:string}
+export interface User {id:string;shortId:string;nickname:string;color:Color;level:number;exp:number;coins:number;gems:number;rankScore:number;needsProfile:boolean;bindings:{wechat:boolean;phone:string|null;account:string|null};passwordHash?:string;salt?:string;wechatOpenid?:string;deviceId?:string;
+ // Economy: owned cosmetics as 'slot:id', what is worn, today's task progress, lifetime stats.
+ owned?:string[];equipped?:Partial<Look>;tasks?:{day:string;progress:Record<string,number>;claimed:string[]};
+ stats?:{games:number;wins:number;captures:number;rescues:number;repairs:number;mvp:number}}
+export interface Look {hat:string;footprint:string;effect:string}
+// One finished match from one player's point of view (战绩 + task progress).
+export interface MatchRecord {matchId:string;at:number;mapId:string;role:Role;win:boolean;score:number;captures:number;rescues:number;repairs:number;survived:boolean;mvp:boolean;durationSec:number}
 export interface Settings {map:string;durationSec:300|480|600;hunterCount:'auto'|1|2;moleEnabled:boolean;voiceEnabled:boolean;aiFill:boolean;maxPlayers:number}
-export interface Player {id:string;nickname:string;color:Color;ready:boolean;isBot:boolean;isHost:boolean;online:boolean}
+export interface Player {id:string;nickname:string;color:Color;ready:boolean;isBot:boolean;isHost:boolean;online:boolean;look?:Look}
 export interface Input {seq:number;mx:number;my:number;run:boolean;at:number}
 export interface Mark extends Pos {kind:string;until:number;audience:'hider'|'hunter'|'all';targetId?:string;by?:string}
 export interface Ripple extends Pos {r:number;kind:string;until:number;hunter:boolean;by?:string;credited?:boolean}

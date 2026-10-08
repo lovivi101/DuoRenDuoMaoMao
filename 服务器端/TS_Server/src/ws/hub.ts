@@ -4,7 +4,8 @@ import type {Store} from '../store/store.js';
 import {safeUser,verifyToken} from '../auth.js';
 import type {GameMessage,Player,Room,User} from '../types.js';
 import {Lobby,validateSettings} from '../lobby/lobby.js';
-import {action,ghostSide,mark,rewardsFor,setInput,setOnline,snapshotFor,tickGame} from '../game/engine.js';
+import {lookOf} from '../economy.js';
+import {action,ghostSide,mark,matchRecord,rewardsFor,setInput,setOnline,snapshotFor,tickGame} from '../game/engine.js';
 import {wireMap} from '../game/maps/old_dorm.js';
 import {visible} from '../game/vision.js';
 import {CONFIG} from '../game/config.js';
@@ -30,12 +31,12 @@ export class Hub {
  send(id:string,m:unknown){const ws=this.sockets.get(id);if(ws?.readyState===WebSocket.OPEN){if(ws.bufferedAmount>1024*1024){ws.close(1013,'slow client');return}ws.send(JSON.stringify(m))}}
  broadcast(r:Room,m:unknown){for(const p of r.players)this.send(p.id,m)}
  state(r:Room){const m={t:'room.state',code:r.code,hostId:r.hostId,settings:r.settings,phase:r.phase,players:r.players.map(p=>({...p,isHost:p.id===r.hostId}))};this.broadcast(r,m);return m}
- private player(u:User):Player{return {id:u.id,nickname:u.nickname,color:u.color,ready:false,isBot:false,isHost:false,online:true}}
+ private player(u:User):Player{return {id:u.id,nickname:u.nickname,color:u.color,ready:false,isBot:false,isHost:false,online:true,look:lookOf(u)}}
  private vote(r:Room){this.state(r);this.broadcast(r,{t:'vote.start',...VOTE_MAPS,endsAt:r.voteEndsAt})}
  private startFor(r:Room,id:string){
  const g=r.game;if(!g)return;const p=g.players.find(p=>p.id===id);if(!p)return;
  const allies=p.role==='hunter'||p.role==='mole'?g.players.filter(q=>q.id!==id&&(q.role==='hunter'||q.role==='mole')).map(q=>({id:q.id,role:q.role})):[];
- this.send(id,{t:'game.start',mapId:g.mapId,map:wireMap(g.map),you:{id,role:p.role},allies,players:g.players.map(({id,nickname,color,isBot})=>({id,nickname,color,isBot})),durationSec:g.durationSec});
+ this.send(id,{t:'game.start',mapId:g.mapId,map:wireMap(g.map),you:{id,role:p.role},allies,players:g.players.map(({id,nickname,color,isBot,look})=>({id,nickname,color,isBot,look})),durationSec:g.durationSec});
  this.send(id,{t:'game.phase',phase:g.phase,endsAt:g.phaseEndsAt});
  this.send(id,{t:'game.drop',drops:g.drops.filter(d=>d.stage!=='taken').map(({id,x,y,stage})=>({id,x,y,stage}))});
  if(g.event)this.send(id,{t:'game.event',kind:g.event.kind,stage:g.event.stage,at:g.event.at,durationSec:(g.event.until-g.event.at)/1000});
@@ -114,7 +115,7 @@ export class Hub {
  for(const m of g.outbox.splice(0)){
  if(m.t==='game.result'){
  r.phase='result';
- if(!r.resultSent){for(const p of g.players){const rewards=rewardsFor(g,p);if(!p.isBot)this.store.reward(g.id,p.id,rewards);this.send(p.id,{...m,rewards})}r.resultSent=true;this.state(r)}
+ if(!r.resultSent){for(const p of g.players){const rewards=rewardsFor(g,p);if(!p.isBot&&!g.voided)this.store.reward(g.id,p.id,rewards,matchRecord(g,p));this.send(p.id,{...m,rewards})}r.resultSent=true;this.state(r)}
  }else if(m.t==='game.fx'){
  for(const p of g.players){if(m.by===p.id||visible(g,p,{x:Number(m.x),y:Number(m.y)}))this.send(p.id,m)}
  }else this.broadcast(r,m);

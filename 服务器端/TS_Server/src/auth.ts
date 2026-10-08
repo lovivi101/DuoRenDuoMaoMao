@@ -1,3 +1,4 @@
+import {lookOf,owned} from './economy.js';
 import {randomBytes,scrypt,timingSafeEqual,createHmac} from 'node:crypto';
 import {promisify} from 'node:util';
 import type {User} from './types.js';
@@ -17,4 +18,4 @@ export function verifyToken(token:string,secret:string,now=Date.now()):string|nu
  const x=JSON.parse(Buffer.from(p,'base64url').toString());
  return typeof x.sub==='string'&&Number.isFinite(x.exp)&&x.exp>now/1000?x.sub:null;
 }catch{return null}}
-export function safeUser(u:User){return {id:u.id,shortId:u.shortId,nickname:u.nickname,color:u.color,level:u.level,exp:u.exp,coins:u.coins,gems:u.gems,rankScore:u.rankScore,needsProfile:u.needsProfile,bindings:{...u.bindings,phone:u.bindings.phone?u.bindings.phone.slice(0,3)+'****'+u.bindings.phone.slice(-4):null}}}
+export function safeUser(u:User){return {id:u.id,shortId:u.shortId,nickname:u.nickname,color:u.color,level:u.level,exp:u.exp,coins:u.coins,gems:u.gems,rankScore:u.rankScore,needsProfile:u.needsProfile,look:lookOf(u),owned:[...owned(u)],stats:u.stats??{games:0,wins:0,captures:0,rescues:0,repairs:0,mvp:0},bindings:{...u.bindings,phone:u.bindings.phone?u.bindings.phone.slice(0,3)+'****'+u.bindings.phone.slice(-4):null}}}

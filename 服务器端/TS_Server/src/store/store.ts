@@ -3,13 +3,14 @@ import {dirname} from 'node:path';
 import {createRequire} from 'node:module';
 import type {DatabaseSync as Database} from 'node:sqlite';
 import {randomInt,randomUUID} from 'node:crypto';
-import type {User} from '../types.js';
+import type {MatchRecord,User} from '../types.js';
+import {applyMatch} from '../economy.js';
 // Resolve the Node 22 builtin directly; Vite 5's builtin list predates node:sqlite.
 const {DatabaseSync}=createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 export interface Store {
  getUser(id:string):User|undefined;findAccount(account:string):User|undefined;findPhone(phone:string):User|undefined;findWechat(openid:string):User|undefined;findDevice(deviceId:string):User|undefined;findShortId(id:string):User|undefined;
  saveUser(u:User):void;create(kind:'account'|'phone'|'wechat'|'guest',value:string,credentials?:{salt:string;hash:string}):User;
- friends(id:string):User[];addFriend(id:string,friendId:string):void;reward(matchId:string,id:string,rewards:{exp:number;coins:number;rankDelta:number}):void;close():void;
+ friends(id:string):User[];addFriend(id:string,friendId:string):void;reward(matchId:string,id:string,rewards:{exp:number;coins:number;rankDelta:number},record?:MatchRecord):void;records(id:string,limit?:number):MatchRecord[];close():void;
 }
 export class SqliteStore implements Store {
  private db:Database;
@@ -23,7 +24,9 @@ export class SqliteStore implements Store {
  CREATE UNIQUE INDEX IF NOT EXISTS user_wechat ON users(json_extract(data,'$.wechatOpenid'));
  CREATE UNIQUE INDEX IF NOT EXISTS user_device ON users(json_extract(data,'$.deviceId'));
  CREATE TABLE IF NOT EXISTS friends(a TEXT,b TEXT,PRIMARY KEY(a,b));
- CREATE TABLE IF NOT EXISTS rewards(match_id TEXT,user_id TEXT,PRIMARY KEY(match_id,user_id));`);
+ CREATE TABLE IF NOT EXISTS rewards(match_id TEXT,user_id TEXT,PRIMARY KEY(match_id,user_id));
+ CREATE TABLE IF NOT EXISTS matches(user_id TEXT,match_id TEXT,at INTEGER,data TEXT NOT NULL,PRIMARY KEY(user_id,match_id));
+ CREATE INDEX IF NOT EXISTS matches_recent ON matches(user_id,at DESC);`);
  }
  private find(field:string,value:string){const row=this.db.prepare('SELECT data FROM users WHERE '+field+'=?').get(value) as {data:string}|undefined;return row?JSON.parse(row.data) as User:undefined}
  getUser(id:string){return this.find('id',id)}
@@ -42,11 +45,14 @@ export class SqliteStore implements Store {
  }
  friends(id:string){return (this.db.prepare('SELECT u.data FROM friends f JOIN users u ON u.id=f.b WHERE f.a=?').all(id) as {data:string}[]).map(r=>JSON.parse(r.data) as User)}
  addFriend(id:string,f:string){this.db.prepare('INSERT OR IGNORE INTO friends VALUES (?,?),(?,?)').run(id,f,f,id)}
- reward(matchId:string,id:string,r:{exp:number;coins:number;rankDelta:number}){
+ reward(matchId:string,id:string,r:{exp:number;coins:number;rankDelta:number},record?:MatchRecord){
  const u=this.getUser(id);if(!u)return;this.db.exec('BEGIN IMMEDIATE');
  try{const row=this.db.prepare('INSERT OR IGNORE INTO rewards VALUES(?,?)').run(matchId,id);
- if(row.changes){u.exp+=r.exp;u.coins+=r.coins;u.rankScore=Math.max(0,u.rankScore+r.rankDelta);u.level=1+Math.floor(u.exp/500);this.saveUser(u)}this.db.exec('COMMIT')}
+ if(row.changes){u.exp+=r.exp;u.coins+=r.coins;u.rankScore=Math.max(0,u.rankScore+r.rankDelta);u.level=1+Math.floor(u.exp/500);
+ if(record){applyMatch(u,record,record.at);this.db.prepare('INSERT OR IGNORE INTO matches VALUES(?,?,?,?)').run(id,matchId,record.at,JSON.stringify(record))}
+ this.saveUser(u)}this.db.exec('COMMIT')}
  catch(e){this.db.exec('ROLLBACK');throw e}
  }
+ records(id:string,limit=20){return (this.db.prepare('SELECT data FROM matches WHERE user_id=? ORDER BY at DESC LIMIT ?').all(id,limit) as {data:string}[]).map(r=>JSON.parse(r.data) as MatchRecord)}
  close(){this.db.close()}
 }

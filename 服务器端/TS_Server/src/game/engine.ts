@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import type {GamePlayer,GameState,Player,Role} from '../types.js';
+import type {GamePlayer,GameState,MatchRecord,Player,Role} from '../types.js';
 import {CONFIG,RULES} from './config.js';
 import {zoneAt} from './maps/old_dorm.js';
 import {createMap} from './maps/index.js';
@@ -131,6 +131,13 @@ export function rewardsFor(g:GameState,p:GamePlayer){
  if(g.voided)return {exp:0,coins:0,rankDelta:0};
  const total=Object.values(p.score).reduce((a,b)=>a+b,0),side=p.role==='hunter'||p.role==='mole'||p.caged&&p.ghostSide==='wraith'?'hunter':'hider',win=g.winner===side;
  return {exp:50+Math.floor(total/2),coins:20+Math.floor(total/5),rankDelta:win?20:-10};
+}
+// One player's view of a finished match, stored for 战绩 and daily tasks.
+export function matchRecord(g:GameState,p:GamePlayer):MatchRecord{
+ const side=p.role==='hunter'||p.role==='mole'||p.caged&&p.ghostSide==='wraith'?'hunter':'hider';
+ return {matchId:g.id,at:g.now,mapId:g.mapId,role:p.role,win:g.winner===side,score:Object.values(p.score).reduce((a,b)=>a+b,0),captures:p.captures,
+  rescues:Math.round((p.score['解救队友']??0)/RULES.points.rescue),repairs:Math.round((p.score['修理发电机']??0)/RULES.points.generator),
+  survived:p.role==='hider'&&living(p),mvp:g.result?.mvp.hider===p.id||g.result?.mvp.hunter===p.id,durationSec:Math.round(Math.max(0,g.now-g.huntStartedAt)/1000)};
 }
 export function finish(g:GameState,winner:'hider'|'hunter',voided=false){
  if(g.phase==='result'||g.phase==='waiting')return;g.winner=winner;g.voided=voided;
