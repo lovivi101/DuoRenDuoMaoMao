@@ -20,7 +20,7 @@ func run() -> void:
 	session.phase_ends = Time.get_unix_time_from_system() * 1000.0 + 300000.0
 	var main: Node = load("res://scenes/Main.tscn").instantiate()
 	root.add_child(main)
-	for page: int in range(1, 20):
+	for page: int in range(1, 24):
 		var path: String = "res://scenes/ui/%02d.tscn" % page
 		var packed: PackedScene = load(path)
 		if packed == null:
@@ -46,7 +46,7 @@ func run() -> void:
 		for frame: int in 3:
 			await process_frame
 		node.queue_free()
-	print("SCENE_LOAD PASS: 19 pages and 2 game scenes")
+	print("SCENE_LOAD PASS: 23 pages and 2 game scenes")
 	quit(0)
 
 func fail(reason: String) -> void:

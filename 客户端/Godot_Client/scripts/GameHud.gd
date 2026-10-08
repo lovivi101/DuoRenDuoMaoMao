@@ -34,6 +34,8 @@ var explored: Dictionary = {}
 var exit_armed_until: int = 0
 # "下次事件 Ns" chip left of the minimap, hidden while an event banner is showing.
 var next_event_label: Label
+# Push-to-talk for 近距离语音 (visible only when the room enables voice).
+var talk_button: Button
 const NEXT_EVENT_RECT: Rect2 = Rect2(868,22,230,64)
 
 func _ready() -> void:
@@ -90,6 +92,12 @@ func _build() -> void:
 	accuse = _button("指认\n按住 F",mirror(Vector2(1210,423),Vector2(92,92)),Vector2(92,92),Color("aa7ced"))
 	accuse.button_down.connect(func() -> void: _accuse(true))
 	accuse.button_up.connect(func() -> void: _accuse(false))
+	talk_button = _button("按住说话",Vector2(28,256),Vector2(118,52),Color("4b5fae"))
+	talk_button.icon = UiAssets.asset("icon/mic-icon")
+	talk_button.expand_icon = true
+	talk_button.add_theme_constant_override("icon_max_width",24)
+	talk_button.button_down.connect(func() -> void: Voice.start_talking(); talk_button.text = "说话中…")
+	talk_button.button_up.connect(func() -> void: Voice.stop_talking(); talk_button.text = "按住说话")
 	spectate_button = _button("切换观战",Vector2(550,585),Vector2(230,58),Color("869bde"))
 	spectate_button.pressed.connect(_spectate)
 	spectate_button.visible = false
@@ -199,6 +207,7 @@ func _process(_delta: float) -> void:
 	if Session.role() == "mole":
 		_caption(accuse, "报点\nF")
 	spectate_button.visible = ghost
+	talk_button.visible = Voice.available()
 	var choose: bool = state == "caged" and me.get("ghostSide") == null
 	ghost_panel.visible = choose
 	ghost_label.visible = choose
@@ -226,12 +235,28 @@ func _process(_delta: float) -> void:
 		info_label.text = "已伪装，移动将解除"
 	elif not Net.connected and not Config.demo:
 		info_label.text = "连接中断，正在重连…"
+	else:
+		# Standing on an elevator / escalator / stairs / hatch: the ride starts after its delay.
+		var cell: Vector2i = Vector2i(world.local_position.floor())
+		for portal: Dictionary in world.map.get("portals", []):
+			if int(portal.x) == cell.x and int(portal.y) == cell.y and state != "ghost":
+				info_label.text = {"elevator":"电梯运行中… 站稳别动","escalator":"乘扶梯换层…","stairs":"走楼梯换层…","hatch":"爬舱口梯…"}.get(str(portal.kind), "传送中…")
+	# Snowfield cold: speed loss shown with a frosty hint.
+	var cold: float = float(me.get("cold", 0))
+	if cold > 0.01 and info_label.text.is_empty():
+		info_label.text = "好冷！速度 -%d%%，回室内取暖" % int(cold * 100)
 	var event: Dictionary = Session.event
 	event_label.text = ""
 	if not event.is_empty() and event.get("stage") != "end":
 		var names: Dictionary = {"blackout":"全楼停电","emergency_light":"应急灯","adrenaline":"肾上腺素","broadcast":"广播点名"}
 		var seconds: int = maxi(0,ceili((float(event.get("at",Net.now_ms()))-Net.now_ms())/1000))
 		event_label.text = str(names.get(event.get("kind"),"事件"))+("  %ds"%seconds if event.get("stage") == "warn" else "  生效中")
+	# Map events (ship tilt, blizzard) share the banner when no shared event is showing.
+	var map_event: Dictionary = Session.snap.get("mapEvent") if Session.snap.get("mapEvent") is Dictionary else {}
+	if event_label.text.is_empty() and not map_event.is_empty():
+		var map_names: Dictionary = {"ship_tilt":"船身倾斜","blizzard":"暴风雪"}
+		var left: int = maxi(0,ceili((float(map_event.get("at",Net.now_ms()))-Net.now_ms())/1000))
+		event_label.text = str(map_names.get(map_event.get("kind"),"地图事件"))+("  %ds"%left if map_event.get("stage") == "warn" else "  生效中")
 	var next_at: float = float(Session.snap.get("nextEventAt",0))
 	next_event_label.visible = event_label.text.is_empty() and next_at > Net.now_ms() and Session.phase in ["hunt","final"]
 	next_event_label.text = "下次事件  %ds"%ceili((next_at-Net.now_ms())/1000.0)
@@ -263,6 +288,9 @@ func _input(event: InputEvent) -> void:
 			KEY_2:
 				if event.pressed: _use_item(1)
 			KEY_F: _accuse(event.pressed)
+			KEY_V:
+				if event.pressed: Voice.start_talking()
+				else: Voice.stop_talking()
 		return
 	var pos: Vector2
 	var id: int = -1
@@ -304,7 +332,9 @@ func _input(event: InputEvent) -> void:
 func _main(pressed: bool) -> void:
 	main_held = pressed
 	if Session.role() == "hunter":
-		if pressed: Net.action("slap")
+		if pressed:
+			Net.action("slap")
+			if is_instance_valid(world): world.slap_until = Time.get_ticks_msec() + 300
 	else:
 		Net.action("interact_start" if pressed else "interact_stop")
 
@@ -400,6 +430,26 @@ func _mark_menu() -> void:
 
 func _draw() -> void:
 	if not is_instance_valid(world): return
+	# Screen-wide overlays first, so HUD panels and buttons stay readable on top of them.
+	var map_event: Dictionary = Session.snap.get("mapEvent") if Session.snap.get("mapEvent") is Dictionary else {}
+	if map_event.get("kind") == "blizzard" and map_event.get("stage") == "start":
+		# Whiteout: a snow veil with drifting streaks (the server also shrinks outdoor vision).
+		draw_rect(Rect2(0,0,1334,750),Color(0.85,0.9,1.0,0.22))
+		var t: float = Time.get_ticks_msec()*0.001
+		for i: int in 60:
+			var x: float = fmod(i*97.0 + t*(180.0 + i%7*30.0), 1400.0) - 30.0
+			var y: float = fmod(i*53.0 + t*(60.0 + i%5*20.0), 780.0) - 15.0
+			draw_line(Vector2(x,y),Vector2(x-14,y+5),Color(1,1,1,0.55),2)
+	if float(Session.me().get("cold",0)) > 0.01:
+		var frost: float = float(Session.me().get("cold",0))
+		for i: int in 14:
+			draw_rect(Rect2(i*3,i*3,1334-i*6,750-i*6),Color(0.6,0.8,1.0,(1-float(i)/14)*0.05*frost/0.3),false,3)
+	if Session.phase == "final":
+		var tex: Texture2D = UiAssets.asset("hud/hud-vignette-red")
+		if tex: draw_texture_rect(tex,Rect2(0,0,1334,750),false)
+		else:
+			for i: int in 25:
+				draw_rect(Rect2(i*2,i*2,1334-i*4,750-i*4),Color(.9,.07,.15,(1-float(i)/25)*.06),false,2)
 	var timer_frame: StyleBox = UiAssets.tex_style("hud/hud-timer-frame",StyleBoxEmpty.new(),Vector2(18,12),Vector2.ZERO)
 	# The frame art carries a clock on its left; widen it leftwards so the digits clear it.
 	draw_style_box(timer_frame,Rect2(timer_label.position-Vector2(62,2),timer_label.size+Vector2(72,6)))
@@ -478,12 +528,6 @@ func _draw() -> void:
 			var at: Vector2 = center+Vector2.RIGHT.rotated(float(i)/wheel_choices.size()*TAU)*65
 			draw_circle(at,30,Color("80612d") if i == wheel_index else Color("39315d"))
 			draw_string(font,at+Vector2(-24,6),_prop_name(wheel_choices[i]),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color.WHITE)
-	if Session.phase == "final":
-		var tex: Texture2D = UiAssets.asset("hud/hud-vignette-red")
-		if tex: draw_texture_rect(tex,Rect2(0,0,1334,750),false)
-		else:
-			for i: int in 25:
-				draw_rect(Rect2(i*2,i*2,1334-i*4,750-i*4),Color(.9,.07,.15,(1-float(i)/25)*.06),false,2)
 	var points: Array = Session.drops.duplicate()
 	for ripple: Dictionary in Session.snap.get("ripples",[]):
 		if float(ripple.get("r",0)) >= 5: points.append(ripple)

@@ -7,10 +7,11 @@ var layer: TileMapLayer = TileMapLayer.new()
 # Walls, furniture and shelves draw on their own layer: lit by the vision light but never
 # shadowed by their own occluders, so room structure stays readable inside the light.
 var wall_layer: TileMapLayer = TileMapLayer.new()
-# Tile ids from map.legend: 0 floor 1 wall_solid 2 wall_cracked 3 door 4 rubble 5 void 6 furniture 7 shelf.
-const BLOCKING: Array[int] = [1, 2, 5, 6, 7]
-const SIGHT_BLOCKING: Array[int] = [1, 2, 5, 7]
-const STRUCTURE: Array[int] = [1, 2, 5, 6, 7]
+# Tile ids from map.legend: 0 floor 1 wall_solid 2 wall_cracked 3 door 4 rubble 5 void 6 furniture
+# 7 shelf 8 curtain (walkable, hides what is behind) 9 atrium (railed drop: blocks movement only).
+const BLOCKING: Array[int] = [1, 2, 5, 6, 7, 9]
+const SIGHT_BLOCKING: Array[int] = [1, 2, 5, 7, 8]
+const STRUCTURE: Array[int] = [1, 2, 5, 6, 7, 8, 9]
 var camera: Camera2D = Camera2D.new()
 var darkness: CanvasModulate = CanvasModulate.new()
 var light: PointLight2D = PointLight2D.new()
@@ -38,8 +39,15 @@ var fx: Array[Dictionary] = []
 var objects: Node2D = Node2D.new()
 # Blocking cells covered by a furniture sprite (map.furniture) render as plain floor.
 var furniture_cells: Dictionary = {}
-# Atlas columns 8 / 9 hold the tile and concrete floors; zones pick their floor (map.zones).
-const FLOOR_COLUMN: Dictionary = {"wood": 0, "tile": 8, "concrete": 9}
+# Atlas: columns 0..9 are the legend tiles (walls / doors in the map's theme), then one column
+# per zone floor (map.zones[].floor -> tile-floor-<floor>).
+var floor_columns: Dictionary = {}
+const FLOOR_BASE: Dictionary = {"wood": Color("3a3f5c"), "tile": Color("3b4462"), "concrete": Color("403f4f"), "corridor": Color("4a5650"), "clinic": Color("5a5f66"),
+	"ward": Color("466066"), "mall": Color("5c5a6a"), "carpet": Color("4a2f45"), "deck": Color("6a5a48"), "cabin": Color("27304a"), "snow": Color("8d9ab8"),
+	"lodge": Color("6a4a32"), "barn": Color("5a4630")}
+# Per-actor animation bookkeeping: last position / movement and state, for facing and effects.
+var actor_motion: Dictionary = {}
+var slap_until: int = 0
 # Decor footprints in cells; anything unlisted is 1x1.
 const DECOR_SIZE: Dictionary = {"rug_dorm": Vector2(3, 2), "puddle": Vector2(2, 1), "bath_mat": Vector2(2, 1)}
 
@@ -63,6 +71,9 @@ func _ready() -> void:
 	add_child(wall_layer)
 	objects.z_index = 1
 	objects.draw.connect(_draw_objects)
+	var light_only: CanvasItemMaterial = CanvasItemMaterial.new()
+	light_only.light_mode = CanvasItemMaterial.LIGHT_MODE_LIGHT_ONLY
+	objects.material = light_only
 	add_child(objects)
 	add_child(actors)
 	add_child(signals_layer)
@@ -101,10 +112,20 @@ func _ready() -> void:
 func _build_tiles() -> void:
 	var set: TileSet = TileSet.new()
 	set.tile_size = Vector2i(32,32)
-	var atlas: Image = Image.create(320,32,false,Image.FORMAT_RGBA8)
-	var names: Array[String] = ["tile-floor-wood","tile-wall-solid","tile-wall-cracked","tile-door","tile-rubble","tile-wall-solid","tile-furniture","tile-shelf","tile-floor-tile","tile-floor-concrete"]
-	var colors: Array[Color] = [Color("3a3f5c"),Color("9a9cc0"),Color("a594ac"),Color("b88a5f"),Color("5e566c"),Color("151424"),Color("8a6a4a"),Color("6d5a48"),Color("3b4462"),Color("403f4f")]
-	for i: int in 10:
+	var theme: String = str(map.get("theme", "old_dorm"))
+	var themed: Callable = func(base: String) -> String:
+		return base + "-" + theme if theme != "old_dorm" and UiAssets.asset("sprite/" + base + "-" + theme) else base
+	var names: Array[String] = ["tile-floor-wood",themed.call("tile-wall-solid"),themed.call("tile-wall-cracked"),themed.call("tile-door"),"tile-rubble","tile-wall-solid","tile-furniture","tile-shelf","tile-curtain","tile-atrium"]
+	var colors: Array[Color] = [Color("3a3f5c"),Color("9a9cc0"),Color("a594ac"),Color("b88a5f"),Color("5e566c"),Color("151424"),Color("8a6a4a"),Color("6d5a48"),Color("6a1f2e"),Color("0b0a16")]
+	for zone: Dictionary in map.get("zones", []):
+		var floor_name: String = str(zone.get("floor", "wood"))
+		if not floor_columns.has(floor_name):
+			floor_columns[floor_name] = names.size()
+			names.append("tile-floor-" + floor_name)
+			colors.append(FLOOR_BASE.get(floor_name, Color("3a3f5c")))
+	var columns: int = names.size()
+	var atlas: Image = Image.create(columns*32,32,false,Image.FORMAT_RGBA8)
+	for i: int in columns:
 		var texture: Texture2D = UiAssets.asset("sprite/" + names[i])
 		# Always paint the procedural base first, then blend the art on top: tile art with
 		# keyed-out (transparent) edges would otherwise leave dark seams between cells.
@@ -112,7 +133,7 @@ func _build_tiles() -> void:
 			for y: int in 32:
 				for x: int in 32:
 					var c: Color = colors[i]
-					if i in [0, 8, 9]:
+					if i == 0 or i >= 10:
 						# Floorboards: soft seams with staggered joints, never mistaken for brick walls.
 						if y % 8 == 7 or (x + (y / 8) * 11) % 32 == 0:
 							c = c.darkened(0.18)
@@ -131,7 +152,7 @@ func _build_tiles() -> void:
 	var source: TileSetAtlasSource = TileSetAtlasSource.new()
 	source.texture = ImageTexture.create_from_image(atlas)
 	source.texture_region_size = Vector2i(32,32)
-	for i: int in 10:
+	for i: int in columns:
 		source.create_tile(Vector2i(i,0))
 	set.add_source(source,0)
 	layer.tile_set = set
@@ -146,22 +167,23 @@ func _update_cell(x: int, y: int, tile: int) -> void:
 		(walls[key] as Node).queue_free()
 		walls.erase(key)
 	var floor_cell: Vector2i = Vector2i(_floor_column(x,y),0)
-	var atlas_tile: Vector2i = floor_cell if tile == 0 else Vector2i(clampi(tile,0,7),0)
+	var atlas_tile: Vector2i = floor_cell if tile == 0 else Vector2i(clampi(tile,0,9),0)
 	if tile in STRUCTURE and not furniture_cells.has(key):
 		layer.set_cell(key,0,floor_cell)
 		wall_layer.set_cell(key,0,atlas_tile)
 	else:
 		layer.set_cell(key,0,floor_cell if furniture_cells.has(key) else atlas_tile)
 		wall_layer.erase_cell(key)
-	if tile in BLOCKING:
+	if tile in BLOCKING or tile in SIGHT_BLOCKING:
 		var wall: StaticBody2D = StaticBody2D.new()
 		wall.position = Vector2(x*32,y*32)
-		var collider: CollisionShape2D = CollisionShape2D.new()
-		var shape: RectangleShape2D = RectangleShape2D.new()
-		shape.size = Vector2(32,32)
-		collider.shape = shape
-		collider.position = Vector2(16,16)
-		wall.add_child(collider)
+		if tile in BLOCKING:
+			var collider: CollisionShape2D = CollisionShape2D.new()
+			var shape: RectangleShape2D = RectangleShape2D.new()
+			shape.size = Vector2(32,32)
+			collider.shape = shape
+			collider.position = Vector2(16,16)
+			wall.add_child(collider)
 		if tile not in SIGHT_BLOCKING:
 			add_child(wall)
 			walls[key] = wall
@@ -177,7 +199,7 @@ func _update_cell(x: int, y: int, tile: int) -> void:
 func _floor_column(x: int, y: int) -> int:
 	for zone: Dictionary in map.get("zones", []):
 		if x >= int(zone.x) and y >= int(zone.y) and x < int(zone.x) + int(zone.w) and y < int(zone.y) + int(zone.h):
-			return int(FLOOR_COLUMN.get(str(zone.get("floor", "wood")), 0))
+			return int(floor_columns.get(str(zone.get("floor", "wood")), 0))
 	return 0
 
 func _light_texture(cone: bool) -> Texture2D:
@@ -275,7 +297,14 @@ func _physics_process(delta: float) -> void:
 	flashlight.texture_scale = 6.0*32/128.0
 	flashlight.visible = Session.role() == "hunter" and bool(me.get("flashlight",true)) and Session.phase != "hide"
 	light.visible = not (Session.role() == "hunter" and Session.phase == "hide")
-	darkness.color = Color("68647b") if Session.event.get("kind") == "emergency_light" and Session.event.get("stage") == "start" else Color("0c0a1a")
+	var emergency: bool = Session.event.get("kind") == "emergency_light" and Session.event.get("stage") == "start"
+	darkness.color = Color("68647b") if emergency else Color("0c0a1a")
+	(objects.material as CanvasItemMaterial).light_mode = CanvasItemMaterial.LIGHT_MODE_NORMAL if emergency else CanvasItemMaterial.LIGHT_MODE_LIGHT_ONLY
+	# Ship tilt: the camera leans with the hull while the slide lasts.
+	var tilt: Dictionary = Session.snap.get("mapEvent", {}) if Session.snap.get("mapEvent") is Dictionary else {}
+	var lean: float = 0.07 * float(tilt.get("dir", 0)) if tilt.get("kind") == "ship_tilt" and tilt.get("stage") == "start" else 0.0
+	camera.ignore_rotation = false
+	camera.rotation = lerpf(camera.rotation, lean, minf(1.0, delta * 3.0))
 	var target: Vector2 = local_position*32
 	if actor_nodes.has(spectating):
 		target = (actor_nodes[spectating] as Node2D).position
@@ -343,13 +372,30 @@ func _actor(data: Dictionary, local: bool) -> void:
 		actors.add_child(node)
 		actor_nodes[id] = node
 		node.draw.connect(func() -> void: _draw_actor(node))
+		# Hat overlay: a child so the pajama tint shader on the body never recolours it.
+		var hat_node: Node2D = Node2D.new()
+		hat_node.name = "Hat"
+		node.add_child(hat_node)
+		hat_node.draw.connect(func() -> void: _draw_hat(node, hat_node))
 	else:
 		node = actor_nodes[id]
+	# Movement and facing come from how far the actor moved since the last frame.
+	var pos: Vector2 = _xy(data)
+	var m: Dictionary = actor_motion.get(id, {"pos": pos, "vel": Vector2.ZERO, "state": str(data.get("state","normal")), "since": 0})
+	var step: Vector2 = pos - Vector2(m.pos)
+	m.vel = Vector2(m.vel).lerp(step / maxf(get_physics_process_delta_time(), 0.001), 0.35)
+	m.pos = pos
+	var state_now: String = str(data.get("state","normal"))
+	if state_now != str(m.state) and (state_now == "disguised" or str(m.state) == "disguised"):
+		fx.append({"kind":"poof","x":pos.x,"y":pos.y,"effect":_look(id).get("effect","poof"),"start":Time.get_ticks_msec(),"until":Time.get_ticks_msec()+400})
+	m.state = state_now
+	actor_motion[id] = m
 	node.set_meta("data",data)
 	node.set_meta("local",local)
-	node.position = _xy(data)*32
+	node.position = pos*32
 	node.z_index = 2
 	node.queue_redraw()
+	node.get_node("Hat").queue_redraw()
 
 func _draw_actor(node: Node2D) -> void:
 	var p: Dictionary = node.get_meta("data")
@@ -364,11 +410,41 @@ func _draw_actor(node: Node2D) -> void:
 		if player.id == p.id:
 			color = UiAssets.player_color(str(player.get("color","blue")))
 	var state: String = str(p.get("state","normal"))
+	if state == "ghost": color.a = 0.5
+	# Sequence frames (T6): facing from motion, walk / idle / slap / caught / ghost strips.
+	var motion: Dictionary = actor_motion.get(str(p.id), {})
+	var vel: Vector2 = motion.get("vel", Vector2.ZERO)
+	var moving: bool = vel.length() > 0.4
+	var face: Array = CharacterArt.facing(vel if moving else Vector2.from_angle(float(p.get("dir", PI / 2))))
+	if not moving and not local:
+		face = ["down", false]
+	node.set_meta("facing", face)
+	var caged: bool = state == "caged" or bool(p.get("caged", false))
+	var anim: Dictionary = CharacterArt.pick(role, "caged" if caged and state != "ghost" else state, moving, bool(p.get("running", run if local else false)), str(face[0]), Time.get_ticks_msec() / 1000.0 + float(hash(str(p.id)) % 100) / 37.0, local and Time.get_ticks_msec() < slap_until)
+	var hider_body: bool = role != "hunter" and state != "ghost"
+	if node.material == null and hider_body:
+		node.material = CharacterArt.tint_material(color)
+	elif not hider_body:
+		node.material = null
+	if state != "disguised" and anim.tex:
+		var src: Rect2 = CharacterArt.frame_rect(anim.tex, int(anim.index))
+		var dest: Rect2 = Rect2(-18,-40,36,54)
+		if face[1] or (anim.name == "hunter-slap" and face[1]):
+			node.draw_set_transform(Vector2.ZERO, 0, Vector2(-1, 1))
+		node.draw_texture_rect_region(anim.tex, dest, src, Color(1,1,1,color.a))
+		node.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+		node.set_meta("hat_dir", "" if not hider_body or caged else str(face[0]))
+		if local:
+			node.draw_arc(Vector2(0,15),14,0,TAU,24,Color("ffc857"),1.2)
+		if Config.settings.colorblind:
+			node.draw_string(ThemeDB.fallback_font,Vector2(-5,-28),"H" if role == "hunter" else "C",HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color.WHITE)
+		return
+	node.set_meta("hat_dir", "")
 	var asset_name: String = "sprite-ghost" if state == "ghost" else ("sprite-hunter" if role == "hunter" else "sprite-hider")
 	if state == "disguised" and p.get("prop") != null:
 		asset_name = "prop-"+str(p.prop).replace("_","-")
+		node.material = null
 	var tex: Texture2D = UiAssets.asset("sprite/"+asset_name)
-	if state == "ghost": color.a = 0.5
 	if tex:
 		# Characters are 2:3 (128x192) with feet at the bottom; props are square.
 		var rect: Rect2 = Rect2(-16,-16,32,32) if asset_name.begins_with("prop-") else Rect2(-18,-40,36,54)
@@ -388,6 +464,28 @@ func _draw_actor(node: Node2D) -> void:
 	if Config.settings.colorblind:
 		node.draw_string(ThemeDB.fallback_font,Vector2(-5,-28),"H" if role == "hunter" else "C",HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color.WHITE)
 
+## Equipped look for a player id: the local user from Session.user, others from game.start.
+func _look(id: String) -> Dictionary:
+	if id == str(Session.user.get("id", "local")):
+		return Session.user.get("look", {})
+	for player: Dictionary in Session.game.get("players", []):
+		if str(player.id) == id:
+			return player.get("look", {}) if player.get("look") is Dictionary else {}
+	return {}
+
+func _draw_hat(node: Node2D, hat_node: Node2D) -> void:
+	var dir: String = str(node.get_meta("hat_dir", ""))
+	if dir.is_empty():
+		return
+	var p: Dictionary = node.get_meta("data")
+	var tex: Texture2D = CharacterArt.hat(str(_look(str(p.id)).get("hat", "nightcap")), dir)
+	if tex == null:
+		return
+	var face: Array = node.get_meta("facing", ["down", false])
+	if face[1]:
+		hat_node.draw_set_transform(Vector2.ZERO, 0, Vector2(-1, 1))
+	hat_node.draw_texture_rect(tex, Rect2(-18,-40,36,54), false, Color(1,1,1,0.5 if str(p.get("state")) == "ghost" else 1.0))
+
 func _draw_objects() -> void:
 	if not initialized:
 		return
@@ -400,6 +498,14 @@ func _draw_objects() -> void:
 		var tex: Texture2D = UiAssets.asset("sprite/furn-"+str(f.kind).replace("_","-"))
 		if tex:
 			objects.draw_texture_rect(tex,Rect2(_xy(f)*32,Vector2(float(f.w),float(f.h))*32),false)
+	for portal: Dictionary in map.get("portals",[]):
+		_object("sprite-portal-"+str(portal.kind),Vector2(float(portal.x)+0.5,float(portal.y)+0.5)*32,Color("6b7fa8"),30)
+	var mech: Dictionary = map.get("mechanics",{}) if map.get("mechanics") is Dictionary else {}
+	for monitor: Dictionary in mech.get("monitors",[]):
+		_object("sprite-ecg-monitor",_xy(monitor)*32,Color("3f8f6a"),22)
+	if mech.get("broadcastRoom") is Dictionary:
+		var room: Dictionary = mech.broadcastRoom
+		_object("sprite-broadcast-mic",Vector2(float(room.x)+float(room.w)/2.0,float(room.y)+float(room.h)/2.0)*32,Color("b04050"),28)
 	for prop: Dictionary in map.get("props",[]):
 		_object("prop-"+str(prop.prop).replace("_","-"),_xy(prop)*32,Color("b79577"))
 	for gen: Dictionary in Session.snap.get("generators",map.get("generators",[])):
@@ -437,9 +543,20 @@ func _draw_signals() -> void:
 		signals_layer.draw_arc(_xy(ripple)*32,maxf(2,radius*amount),0,TAU,48,color,2.0 if Config.settings.visual_audio else 1.2)
 	for footprint: Dictionary in Session.snap.get("footprints",[]):
 		var pos: Vector2 = _xy(footprint)*32
-		signals_layer.draw_line(pos,pos+Vector2(4,0).rotated(float(footprint.get("dir",0))),Color(0.8,.8,1,.4),3)
+		var print_tex: Texture2D = UiAssets.asset("sprite/footprint-"+str(footprint.get("style","plain")))
+		if print_tex:
+			signals_layer.draw_set_transform(pos, float(footprint.get("dir",0)) + PI / 2, Vector2.ONE)
+			signals_layer.draw_texture_rect(print_tex, Rect2(-6,-6,12,12), false, Color(0.85,.85,1,.55))
+			signals_layer.draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
+		else:
+			signals_layer.draw_line(pos,pos+Vector2(4,0).rotated(float(footprint.get("dir",0))),Color(0.8,.8,1,.4),3)
 	for mark: Dictionary in Session.snap.get("marks",[]):
-		signals_layer.draw_arc(_xy(mark)*32,18,0,TAU,20,Color("f8ca65"),2)
+		if mark.get("kind") == "xray":
+			# X-ray room: a cyan skeleton-scan ring everyone can see for a moment.
+			signals_layer.draw_arc(_xy(mark)*32,20,0,TAU,24,Color("7ff0ff"),3)
+			signals_layer.draw_string(ThemeDB.fallback_font,_xy(mark)*32+Vector2(-14,-26),"X光",HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("7ff0ff"))
+		else:
+			signals_layer.draw_arc(_xy(mark)*32,18,0,TAU,20,Color("f8ca65"),2)
 	for drop: Dictionary in Session.drops:
 		if drop.get("stage") != "taken":
 			var pos: Vector2 = _xy(drop)*32
@@ -449,7 +566,15 @@ func _draw_signals() -> void:
 		if int(effect.until) > Time.get_ticks_msec():
 			remaining.append(effect)
 			var pos: Vector2 = _xy(effect)*32
-			if effect.kind == "caught":
+			if effect.kind == "poof":
+				var strip_name: String = "poof-" + str(effect.get("effect","poof"))
+				var poof: Texture2D = CharacterArt.strip(strip_name) if effect.get("effect","poof") != "poof" else null
+				if poof == null:
+					poof = CharacterArt.strip("disguise-poof")
+				if poof:
+					var frame: int = clampi(int((Time.get_ticks_msec() - int(effect.start)) / 100), 0, 3)
+					signals_layer.draw_texture_rect_region(poof, Rect2(pos - Vector2(24,30), Vector2(48,48)), Rect2(frame*128,0,128,128))
+			elif effect.kind == "caught":
 				signals_layer.draw_string(ThemeDB.fallback_font,pos+Vector2(-40,-40),"抓到了！",HORIZONTAL_ALIGNMENT_LEFT,-1,23,Color("ffc857"))
 			else:
 				signals_layer.draw_circle(pos,24,Color(.8,.8,1,.35))

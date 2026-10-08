@@ -15,6 +15,10 @@ config/version="0.1.0"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
+[audio]
+
+driver/enable_input=true
+
 [autoload]
 
 Config="*res://autoload/Config.gd"
@@ -24,6 +28,7 @@ Session="*res://autoload/Session.gd"
 Router="*res://autoload/Router.gd"
 Audio="*res://autoload/Audio.gd"
 WeChat="*res://autoload/WeChat.gd"
+Voice="*res://autoload/Voice.gd"
 
 [display]
 

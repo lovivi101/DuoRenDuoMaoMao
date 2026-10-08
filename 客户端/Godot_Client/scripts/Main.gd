@@ -25,11 +25,22 @@ var code_cells: Array[Label] = []
 var my_vote: int = -1
 # Announcement fetched at startup; shown as a modal on the splash / login page.
 var notice: Dictionary = {}
+# Economy pages (20-23): server data cached per visit; cleared when leaving the lobby flow.
+var shop_cache: Dictionary = {}
+var records_cache: Dictionary = {}
+var tasks_cache: Dictionary = {}
+var shop_slot: String = "hat"
 # Scene art per page (素材 01-背景); pages without art keep the plain dark colour.
-const PAGE_BACKGROUNDS: Dictionary = {1: "bg-splash-dorm-night", 2: "bg-login-dorm-gate", 3: "bg-login-dorm-gate", 4: "bg-login-dorm-gate", 5: "bg-lobby-dorm-hall", 6: "bg-lobby-dorm-hall", 7: "bg-matching-corridor", 8: "bg-room-waiting-hall", 9: "bg-room-waiting-hall", 10: "bg-room-waiting-hall", 11: "bg-map-vote-blueprint", 12: "bg-role-reveal-dark", 17: "bg-result-dawn", 18: "bg-menu-dim", 19: "bg-menu-dim"}
+const PAGE_BACKGROUNDS: Dictionary = {1: "bg-splash-dorm-night", 2: "bg-login-dorm-gate", 3: "bg-login-dorm-gate", 4: "bg-login-dorm-gate", 5: "bg-lobby-dorm-hall", 6: "bg-lobby-dorm-hall", 7: "bg-matching-corridor", 8: "bg-room-waiting-hall", 9: "bg-room-waiting-hall", 10: "bg-room-waiting-hall", 11: "bg-map-vote-blueprint", 12: "bg-role-reveal-dark", 17: "bg-result-dawn", 18: "bg-menu-dim", 19: "bg-menu-dim", 20: "bg-lobby-dorm-hall", 21: "bg-menu-dim", 22: "bg-menu-dim", 23: "bg-menu-dim"}
 # Form-heavy pages get a dark veil over the scene so text stays readable.
-const DIMMED_PAGES: Array[int] = [3, 4, 8, 9, 10, 18, 19]
-const MAP_INFO: Dictionary = {"old_dorm": {"name":"旧宿舍楼", "card":"map-old-dorm", "desc":"中心辐射 · 8～12 人"}, "night_hospital": {"name":"深夜医院", "card":"map-night-hospital", "desc":"两翼长走廊"}, "night_mall": {"name":"夜间商场", "card":"map-night-mall", "desc":"双层天井"}, "midnight_cruise": {"name":"午夜游轮", "card":"map-midnight-cruise", "desc":"甲板 + 船舱"}, "snow_lodge": {"name":"雪山山庄", "card":"map-snow-lodge", "desc":"木屋 + 雪地"}}
+const DIMMED_PAGES: Array[int] = [3, 4, 8, 9, 10, 18, 19, 21, 22, 23]
+const MAP_INFO: Dictionary = {"old_dorm": {"name":"旧宿舍楼", "card":"map-old-dorm", "desc":"中心辐射 · 8～12 人", "feature":"基准图：无专属机制，适合新手"},
+	"night_hospital": {"name":"深夜医院", "card":"map-night-hospital", "desc":"两翼长走廊 · 8～10 人", "feature":"电梯 3 秒穿越两翼；跑过心电监护仪会响；X 光室会暴露进入者"},
+	"night_mall": {"name":"夜间商场", "card":"map-night-mall", "desc":"双层天井 · 10～12 人", "feature":"扶梯和楼梯换层；试衣间帘子挡视线；广播室可放一次假警报"},
+	"midnight_cruise": {"name":"午夜游轮", "card":"map-midnight-cruise", "desc":"甲板 + 船舱 · 8～12 人", "feature":"甲板月光看得远；每 90 秒船身倾斜，伪装者不会滑动"},
+	"snow_lodge": {"name":"雪山山庄", "card":"map-snow-lodge", "desc":"木屋 + 雪地 · 10～12 人", "feature":"雪地脚印留 15 秒；暴风雪遮挡视线；室外太久会冻得变慢"},
+	"random": {"name":"随机地图", "card":"map-old-dorm", "desc":"投票时三张图随机出现", "feature":"每局由投票决定去哪张图"}}
+const MAP_ORDER: Array[String] = ["old_dorm", "night_hospital", "night_mall", "midnight_cruise", "snow_lodge", "random"]
 const ROLE_INFO: Dictionary = {"hider": {"name":"藏者", "goal":"存活到最后！", "desc":"利用伪装躲开猎手，\n修好发电机缩短倒计时", "art":"role/role-hider", "color":Color("7fb2ff")}, "hunter": {"name":"猎手", "goal":"抓住所有藏者！", "desc":"打开手电追踪脚印与波纹，\n拍打可疑的物件", "art":"role/role-hunter", "color":Color("e5383b")}, "mole": {"name":"卧底", "goal":"暗中帮助猎手！", "desc":"混在藏者中报点，\n别被识破身份", "art":"role/role-mole", "color":Color("b98cff")}}
 # Type scale at the 1334x750 base resolution.
 const FS_TITLE: int = 40
@@ -121,6 +132,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func show_page(page: int) -> void:
 	if not is_instance_valid(canvas):
 		return
+	if page == 6:
+		shop_cache = {}
+		records_cache = {}
+		tasks_cache = {}
 	if page not in [13, 14, 15, 16] and is_instance_valid(game_world):
 		game_world.queue_free()
 		game_world = null
@@ -185,6 +200,10 @@ func _build_page(page: int) -> void:
 		17: _build_result()
 		18: _build_friends()
 		19: _build_settings()
+		20: _build_wardrobe()
+		21: _build_shop()
+		22: _build_records()
+		23: _build_tasks()
 
 # ---------------------------------------------------------------- 01 启动闪屏
 
@@ -249,7 +268,7 @@ func _build_login() -> void:
 		wechat.icon = UiAssets.asset("icon/wechat-icon")
 	wechat.pressed.connect(_wechat_login)
 	panel.add_child(wechat)
-	if not WeChat.native_available():
+	if not WeChat.native_available() and OS.is_debug_build():
 		panel.add_child(_label("开发模式 · 微信 Mock", Vector2(0, 198), Vector2(590, 22), 14, Color("6fe39b"), true))
 	var phone: Button = _button("手机号登录", Vector2(50, 232), Vector2(238, 72), Color("3959b8"), FS_BUTTON, "icon/phone-icon")
 	phone.pressed.connect(func() -> void: if _consented(): Router.go(3))
@@ -326,7 +345,8 @@ func _build_sms() -> void:
 	var login: Button = _button("登 录", Vector2(50, 360), Vector2(520, 84), UiAssets.COLOR_GOLD, 32)
 	login.pressed.connect(_sms_login)
 	panel.add_child(login)
-	panel.add_child(_label("未配置短信服务时，验证码会以开发提示显示", Vector2(0, 452), Vector2(620, 26), 14, UiAssets.COLOR_MUTED, true))
+	if OS.is_debug_build():
+		panel.add_child(_label("未配置短信服务时，验证码会以开发提示显示", Vector2(0, 452), Vector2(620, 26), 14, UiAssets.COLOR_MUTED, true))
 
 func _send_sms() -> void:
 	if countdown > 0:
@@ -376,7 +396,7 @@ func _build_account() -> void:
 		y += 82.0
 	else:
 		var forgot: Button = _link_button("忘记密码？", Vector2(430, y), Vector2(130, 32))
-		forgot.pressed.connect(func() -> void: show_toast("请使用手机号验证码登录后重设密码"))
+		forgot.pressed.connect(_forgot_password)
 		panel.add_child(forgot)
 		y += 44.0
 	var submit: Button = _button("注 册" if register_mode else "登 录", Vector2(60, y + 20), Vector2(500, 84), UiAssets.COLOR_GOLD, 32)
@@ -451,7 +471,7 @@ func _build_lobby() -> void:
 	card.add_child(_progress(Vector2(160, 48), Vector2(150, 22), float(int(user.get("exp", 0)) % 100) / 100.0))
 	# Top-centre currencies, top-right settings.
 	for i: int in 2:
-		var chip: Control = _resource_chip(["icon/coin-icon", "icon/gem-icon"][i], str(user.get(["coins", "gems"][i], 0)), Vector2(470 + i * 230, 30), Vector2(210, 60))
+		var chip: Control = _resource_chip(["icon/coin-icon", "icon/gem-icon"][i], str(int(user.get(["coins", "gems"][i], 0))), Vector2(470 + i * 230, 30), Vector2(210, 60))
 		chip.add_child(UiAssets.picture("icon/plus-icon", Vector2(168, 16), Vector2(28, 28)))
 		_add(chip)
 	var setting: Button = _icon_button("icon/settings-icon", Vector2(1216, 24), Vector2(84, 84), Color("2c2552"))
@@ -477,8 +497,7 @@ func _build_lobby() -> void:
 	for i: int in items.size():
 		var b: Button = _nav_button(str(items[i][0]), str(items[i][1]), Vector2(30 + i * 150, 8), Vector2(140, 84))
 		b.pressed.connect(func() -> void:
-			if i == 0: Router.go(18)
-			else: show_toast("敬请期待"))
+			Router.go([18, 20, 21, 22, 23][i]))
 		nav.add_child(b)
 
 func _match_start() -> void:
@@ -521,13 +540,38 @@ func _build_create_room() -> void:
 	var map_panel: Panel = _panel(Vector2(90, 120), Vector2(420, 540))
 	_add(map_panel)
 	_section_title(map_panel, "选择地图", "icon/map-icon")
-	var info: Dictionary = MAP_INFO["old_dorm"]
-	var frame: Panel = _panel(Vector2(34, 80), Vector2(352, 220), "button/card_map_frame")
+	var map_index: int = maxi(0, MAP_ORDER.find(str(room_settings.map)))
+	var info: Dictionary = MAP_INFO[MAP_ORDER[map_index]]
+	var frame: Panel = _panel(Vector2(64, 80), Vector2(292, 190), "button/card_map_frame")
 	map_panel.add_child(frame)
-	frame.add_child(UiAssets.picture("mapcard/" + str(info.card), Vector2(12, 12), Vector2(328, 196)))
-	map_panel.add_child(_title_label(str(info.name), Vector2(0, 318), Vector2(420, 44), 32, UiAssets.COLOR_TEXT, true))
-	map_panel.add_child(_label(str(info.desc), Vector2(0, 366), Vector2(420, 28), FS_BODY, UiAssets.COLOR_MUTED, true))
-	map_panel.add_child(_label("其余 4 张地图敬请期待", Vector2(0, 470), Vector2(420, 26), FS_SMALL, UiAssets.COLOR_MUTED, true))
+	var card: TextureRect = UiAssets.picture("mapcard/" + str(info.card), Vector2(10, 10), Vector2(272, 170))
+	if MAP_ORDER[map_index] == "random":
+		card.modulate = Color(0.35, 0.35, 0.45)
+		frame.add_child(card)
+		frame.add_child(_title_label("?", Vector2(0, 30), Vector2(292, 120), 96, UiAssets.COLOR_GOLD, true))
+	else:
+		frame.add_child(card)
+	# Arrows cycle through the five maps and "random".
+	for side: int in 2:
+		var arrow: Button = _button("◀" if side == 0 else "▶", Vector2(8 if side == 0 else 364, 150), Vector2(48, 64), Color("38345e"), 26)
+		arrow.pressed.connect(func() -> void:
+			room_settings.map = MAP_ORDER[posmod(map_index + (-1 if side == 0 else 1), MAP_ORDER.size())]
+			show_page(8))
+		map_panel.add_child(arrow)
+	map_panel.add_child(_title_label(str(info.name), Vector2(0, 284), Vector2(420, 44), 32, UiAssets.COLOR_TEXT, true))
+	map_panel.add_child(_label(str(info.desc), Vector2(0, 330), Vector2(420, 28), FS_BODY, UiAssets.COLOR_MUTED, true))
+	var feature: Label = _label(str(info.feature), Vector2(36, 366), Vector2(348, 90), FS_SMALL, UiAssets.COLOR_TEXT, true)
+	feature.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	map_panel.add_child(feature)
+	for i: int in MAP_ORDER.size():
+		var dot: Panel = Panel.new()
+		dot.position = Vector2(210 - MAP_ORDER.size() * 10 + i * 20, 470)
+		dot.size = Vector2(10, 10)
+		var dot_style: StyleBoxFlat = StyleBoxFlat.new()
+		dot_style.bg_color = UiAssets.COLOR_GOLD if i == map_index else Color("4a4470")
+		dot_style.set_corner_radius_all(5)
+		dot.add_theme_stylebox_override("panel", dot_style)
+		map_panel.add_child(dot)
 
 	var panel: Panel = _panel(Vector2(530, 120), Vector2(714, 540))
 	_add(panel)
@@ -621,6 +665,11 @@ func _build_waiting() -> void:
 	copy.pressed.connect(func() -> void: DisplayServer.clipboard_set(code); show_toast("房间码已复制"))
 	_add(copy)
 	var share: Button = _button("分享", Vector2(1208, 28), Vector2(100, 62), Color("38345e"), 20, "icon/share-icon")
+	if bool(Session.room.get("settings", {}).get("voiceEnabled", false)):
+		var talk: Button = _button("按住说话", Vector2(580, 28), Vector2(166, 62), Color("3959b8"), 20, "icon/mic-icon")
+		talk.button_down.connect(Voice.start_talking)
+		talk.button_up.connect(Voice.stop_talking)
+		_add(talk)
 	share.pressed.connect(func() -> void: DisplayServer.clipboard_set("来《熄灯》一起躲猫猫！房间码 %s" % code); show_toast("邀请文字已复制"))
 	_add(share)
 
@@ -1043,15 +1092,18 @@ func _build_settings() -> void:
 	acct.add_child(_label("ID " + str(user.get("shortId", "--------")), Vector2(134, 122), Vector2(240, 28), FS_SMALL, UiAssets.COLOR_MUTED))
 	acct.add_child(_label("账号绑定", Vector2(30, 196), Vector2(300, 30), FS_BODY, UiAssets.COLOR_GOLD))
 	var bindings: Dictionary = user.get("bindings", {})
-	var binds: Array = [["icon/wechat-icon", "微信", bool(bindings.get("wechat", false))], ["icon/phone-icon", "手机号", bindings.get("phone") != null and str(bindings.get("phone", "")) != ""]]
-	for i: int in 2:
-		var y: float = 240 + i * 80
-		acct.add_child(UiAssets.picture(str(binds[i][0]), Vector2(30, y + 6), Vector2(44, 44)))
-		acct.add_child(_label(str(binds[i][1]), Vector2(86, y), Vector2(140, 56), FS_BODY, UiAssets.COLOR_TEXT))
+	var has_phone: bool = bindings.get("phone") != null and str(bindings.get("phone", "")) != ""
+	var binds: Array = [["icon/wechat-icon", "微信", bool(bindings.get("wechat", false)), _bind_wechat],
+		["icon/phone-icon", str(bindings.phone) if has_phone else "手机号", has_phone, _bind_phone],
+		["icon/user-icon", str(bindings.get("account")) if bindings.get("account") else "账号密码", bindings.get("account") != null and str(bindings.get("account", "")) != "", _bind_account]]
+	for i: int in binds.size():
+		var y: float = 232 + i * 68
+		acct.add_child(UiAssets.picture(str(binds[i][0]), Vector2(30, y + 8), Vector2(40, 40)))
+		acct.add_child(_label(str(binds[i][1]), Vector2(82, y), Vector2(156, 56), FS_BODY, UiAssets.COLOR_TEXT))
 		var bound: bool = bool(binds[i][2])
-		var bind: Button = _button("已绑定" if bound else "去绑定", Vector2(240, y + 2), Vector2(128, 52), Color("38345e") if bound else UiAssets.COLOR_GREEN, 20)
+		var bind: Button = _button("已绑定" if bound else "去绑定", Vector2(244, y + 4), Vector2(124, 50), Color("38345e") if bound else UiAssets.COLOR_GREEN, 20)
 		bind.disabled = bound
-		bind.pressed.connect(func() -> void: show_toast("绑定功能敬请期待"))
+		bind.pressed.connect(binds[i][3])
 		acct.add_child(bind)
 	var out: Button = _button("退出登录", Vector2(30, 460), Vector2(338, 72), UiAssets.COLOR_RED, 26, "icon/exit-icon")
 	out.pressed.connect(func() -> void: Session.logout())
@@ -1061,6 +1113,83 @@ func _build_settings() -> void:
 	debug.pressed.connect(_show_server_debug)
 	_add(debug)
 
+# ---------------------------------------------------------------- 账号绑定 / 找回密码
+
+## Modal form over the current page. `fields` = [[key, placeholder, secret]]; a field named
+## "code" gets a 获取验证码 button that sends an SMS to the "phone" field.
+func _form_modal(title: String, fields: Array, submit_text: String, on_submit: Callable) -> void:
+	var veil: ColorRect = ColorRect.new()
+	veil.color = Color(0.02, 0.01, 0.06, 0.7)
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.name = "FormModal"
+	_add(veil)
+	var height: float = 190.0 + fields.size() * 80.0
+	var panel: Panel = _panel(Vector2(367, (750.0 - height) / 2.0), Vector2(600, height), "panel/panel_modal")
+	veil.add_child(panel)
+	panel.add_child(_title_label(title, Vector2(0, 24), Vector2(600, 50), 32, UiAssets.COLOR_GOLD, true))
+	var edits: Dictionary = {}
+	for i: int in fields.size():
+		var f: Array = fields[i]
+		var is_code: bool = str(f[0]) == "code"
+		var e: LineEdit = _edit(str(f[1]), Vector2(50, 92 + i * 80), Vector2(320 if is_code else 500, 64))
+		e.secret = bool(f[2])
+		panel.add_child(e)
+		edits[str(f[0])] = e
+		if is_code:
+			var send: Button = _button("获取验证码", Vector2(384, 92 + i * 80), Vector2(166, 64), UiAssets.COLOR_GOLD, 20)
+			send.pressed.connect(func() -> void:
+				var phone: LineEdit = edits.get("phone")
+				var response: Dictionary = await Api.request("/auth/sms/send", {"phone": phone.text if phone else ""})
+				show_toast(("开发验证码：" + str(response.devCode)) if response.has("devCode") else str(response.get("msg", "验证码已发送")) if not response.get("ok", false) else "验证码已发送"))
+			panel.add_child(send)
+	var cancel: Button = _button("取消", Vector2(50, height - 92), Vector2(230, 66), Color("38345e"), 24)
+	cancel.pressed.connect(veil.queue_free)
+	panel.add_child(cancel)
+	var ok: Button = _button(submit_text, Vector2(320, height - 92), Vector2(230, 66), UiAssets.COLOR_GOLD, 24)
+	ok.pressed.connect(func() -> void:
+		var values: Dictionary = {}
+		for key: String in edits: values[key] = (edits[key] as LineEdit).text.strip_edges()
+		var response: Dictionary = await on_submit.call(values)
+		if response.get("ok", false):
+			if is_instance_valid(veil): veil.queue_free()
+		else:
+			show_toast(str(response.get("msg", "操作失败"))))
+	panel.add_child(ok)
+
+func _after_bind(response: Dictionary, done: String) -> Dictionary:
+	if response.get("ok", false):
+		Session.user = response.user
+		show_toast(done)
+		show_page(Router.current)
+	return response
+
+func _bind_wechat() -> void:
+	var code: Dictionary = await WeChat.authorize_code("mock_bind_" + str(Session.user.get("id", "")))
+	if not code.get("ok", false):
+		show_toast(str(code.get("msg", "微信授权失败")))
+		return
+	var response: Dictionary = await Api.request("/bind/wechat", {"code": code.code})
+	if not _after_bind(response, "微信已绑定").get("ok", false):
+		show_toast(str(response.get("msg", "绑定失败")))
+
+func _bind_phone() -> void:
+	_form_modal("绑定手机号", [["phone", "请输入手机号", false], ["code", "请输入验证码", false]], "绑 定", func(v: Dictionary) -> Dictionary:
+		return _after_bind(await Api.request("/bind/phone", {"phone": v.phone, "code": v.code}), "手机号已绑定"))
+
+func _bind_account() -> void:
+	_form_modal("设置账号密码", [["account", "账号（4–20 位字母数字）", false], ["password", "密码（6–32 位）", true], ["confirm", "再次输入密码", true]], "保 存", func(v: Dictionary) -> Dictionary:
+		if v.password != v.confirm:
+			return {"ok": false, "msg": "两次输入的密码不一致"}
+		return _after_bind(await Api.request("/bind/account", {"account": v.account, "password": v.password}), "账号密码已设置"))
+
+func _forgot_password() -> void:
+	_form_modal("找回密码", [["phone", "账号绑定的手机号", false], ["code", "请输入验证码", false], ["password", "新密码（6–32 位）", true]], "重置密码", func(v: Dictionary) -> Dictionary:
+		var response: Dictionary = await Api.request("/auth/password/reset", {"phone": v.phone, "code": v.code, "password": v.password})
+		if response.get("ok", false):
+			show_toast("密码已重置，请用账号 %s 登录" % str(response.get("account", "")))
+			if is_instance_valid(account_edit): account_edit.text = str(response.get("account", ""))
+		return response)
+
 func _show_server_debug() -> void:
 	var edit: LineEdit = _edit("http://127.0.0.1:8787", Vector2(445, 684), Vector2(390, 56)); edit.text = Config.server_url; active_page.add_child(edit)
 	var save: Button = _button("连接", Vector2(845, 684), Vector2(110, 56), UiAssets.COLOR_GOLD, 22); save.pressed.connect(func() -> void:
@@ -1069,6 +1198,225 @@ func _show_server_debug() -> void:
 		Net.disconnect_session()
 		Net.connect_session()
 		show_toast("服务器地址已保存")); active_page.add_child(save)
+
+# ---------------------------------------------------------------- 20 衣柜 / 21 商店
+
+const SLOT_TABS: Array = [["hat", "帽子"], ["footprint", "脚印"], ["effect", "变身特效"]]
+
+## Icon for a cosmetic: hat front overlay cropped to the hat, footprint print, effect mid-frame.
+func _item_icon(slot: String, id: String) -> Texture2D:
+	var tex: Texture2D
+	var region: Rect2
+	match slot:
+		"hat":
+			tex = CharacterArt.hat(id, "down")
+			region = UiAssets.used_rect("sprite/hat-%s-down" % id)
+		"footprint":
+			tex = UiAssets.asset("sprite/footprint-" + id) if id != "plain" else UiAssets.asset("decor/decor-footprints")
+			return tex
+		_:
+			tex = CharacterArt.strip("poof-" + id) if id != "poof" else CharacterArt.strip("disguise-poof")
+			region = Rect2(128, 0, 128, 128)
+	if tex == null:
+		return null
+	var atlas: AtlasTexture = AtlasTexture.new()
+	atlas.atlas = tex
+	atlas.region = region if region.size.x > 0 else Rect2(Vector2.ZERO, tex.get_size())
+	return atlas
+
+## Loads /shop once per visit, then rebuilds the page with the data.
+func _with_shop(page: int) -> bool:
+	if not shop_cache.is_empty():
+		return true
+	_add(_label("正在加载…", Vector2(0, 360), Vector2(1334, 40), FS_BODY, UiAssets.COLOR_MUTED, true))
+	var response: Dictionary = await Api.get_json("/shop")
+	if response.get("ok", false) and Router.current == page:
+		shop_cache = response
+		show_page(page)
+	elif Router.current == page:
+		show_toast(str(response.get("msg", "加载失败")))
+	return false
+
+func _slot_tabs(page: int) -> void:
+	var tabs: HBoxContainer = _tabs(SLOT_TABS.map(func(t: Array) -> String: return str(t[1])), SLOT_TABS.map(func(t: Array) -> String: return str(t[0])).find(shop_slot), Vector2(560, 120), Vector2(540, 56), func(i: int) -> void:
+		shop_slot = str(SLOT_TABS[i][0])
+		show_page(page))
+	_add(tabs)
+
+func _build_wardrobe() -> void:
+	_header("衣柜", 6)
+	var look: Dictionary = Session.user.get("look", {}) if Session.user.get("look") is Dictionary else {}
+	var preview_hat: String = str(look.get("hat", "nightcap"))
+	_add(_floor_glow(Vector2(270, 600), Vector2(420, 100)))
+	_add(CharacterArt.figure(str(Session.user.get("color", "blue")), preview_hat, Vector2(110, 170), 384))
+	var worn: Panel = _panel(Vector2(70, 630), Vector2(420, 70), "panel/panel_list_row")
+	_add(worn)
+	var names: Array = []
+	for slot: String in ["hat", "footprint", "effect"]:
+		for item: Dictionary in shop_cache.get("items", []):
+			if item.slot == slot and item.id == str(look.get(slot, "")):
+				names.append(item.name)
+	worn.add_child(_label("当前穿戴：" + (" · ".join(names) if not names.is_empty() else "默认"), Vector2(20, 0), Vector2(380, 70), FS_SMALL, UiAssets.COLOR_TEXT))
+	if not await _with_shop(20):
+		return
+	_slot_tabs(20)
+	_item_grid(20)
+
+func _build_shop() -> void:
+	_header("商店", 6)
+	for i: int in 2:
+		_add(_resource_chip(["icon/coin-icon", "icon/gem-icon"][i], str(int(Session.user.get(["coins", "gems"][i], 0))), Vector2(860 + i * 230, 26), Vector2(210, 60)))
+	if not await _with_shop(21):
+		return
+	_slot_tabs(21)
+	_add(_label("皮肤只改外观，不影响体型、速度和在黑暗中的可见度", Vector2(560, 690), Vector2(700, 26), FS_SMALL, UiAssets.COLOR_MUTED))
+	_item_grid(21)
+
+## Item cards: the wardrobe shows everything (owned ones equip, others link to the shop);
+## the shop shows prices and buys.
+func _item_grid(page: int) -> void:
+	var look: Dictionary = Session.user.get("look", {}) if Session.user.get("look") is Dictionary else {}
+	var items: Array = shop_cache.get("items", []).filter(func(i: Dictionary) -> bool: return i.slot == shop_slot)
+	var x0: float = 560.0 if page == 20 else 120.0
+	var columns: int = 4 if page == 20 else 6
+	for n: int in items.size():
+		var item: Dictionary = items[n]
+		var owned: bool = bool(item.get("owned", false))
+		var worn: bool = owned and str(look.get(shop_slot, "")) == str(item.id)
+		var card: Button = _card_button(Vector2(x0 + (n % columns) * 180, 196 + (n / columns) * 236), Vector2(168, 224), worn)
+		var icon: TextureRect = TextureRect.new()
+		icon.texture = _item_icon(shop_slot, str(item.id))
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon.position = Vector2(24, 18)
+		icon.size = Vector2(120, 104)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if page == 20 and not owned:
+			icon.modulate = Color(0.45, 0.45, 0.55)
+		card.add_child(icon)
+		card.add_child(_label(str(item.name), Vector2(0, 126), Vector2(168, 30), 18, UiAssets.COLOR_GOLD if worn else UiAssets.COLOR_TEXT, true))
+		var action_text: String
+		var action_color: Color = UiAssets.COLOR_GOLD
+		if page == 20:
+			action_text = "已穿戴" if worn else ("穿戴" if owned else "去商店")
+			if worn or not owned: action_color = Color("38345e")
+		else:
+			action_text = "已拥有" if owned else ("%d %s" % [int(item.price), "金币" if item.currency == "coins" else "钻石"] if int(item.price) > 0 else "免费")
+			if owned: action_color = Color("38345e")
+		var act: Button = _button(action_text, Vector2(14, 166), Vector2(140, 46), action_color, 18)
+		act.disabled = worn or (page == 21 and owned)
+		var slot: String = shop_slot
+		var id: String = str(item.id)
+		act.pressed.connect(func() -> void:
+			if page == 20 and not owned:
+				Router.go(21)
+				return
+			_shop_action("/wardrobe/equip" if page == 20 else "/shop/buy", slot, id, page))
+		card.pressed.connect(func() -> void: act.pressed.emit())
+		card.add_child(act)
+		if bool(item.get("rare", false)):
+			card.add_child(_label("稀有", Vector2(108, 6), Vector2(54, 24), 14, UiAssets.COLOR_GOLD, true))
+		_add(card)
+
+func _shop_action(path: String, slot: String, id: String, page: int) -> void:
+	var response: Dictionary = await Api.request(path, {"slot": slot, "id": id})
+	if response.get("ok", false):
+		Session.user = response.user
+		shop_cache = {}
+		show_toast("已穿戴" if "equip" in path else "购买成功，去衣柜穿上吧")
+		show_page(page)
+	else:
+		show_toast(str(response.get("msg", "操作失败")))
+
+# ---------------------------------------------------------------- 22 战绩
+
+func _build_records() -> void:
+	_header("战绩", 6)
+	if records_cache.is_empty():
+		_add(_label("正在加载…", Vector2(0, 360), Vector2(1334, 40), FS_BODY, UiAssets.COLOR_MUTED, true))
+		var response: Dictionary = await Api.get_json("/records")
+		if response.get("ok", false) and Router.current == 22:
+			records_cache = response
+			show_page(22)
+		return
+	var stats: Dictionary = records_cache.get("stats", {})
+	var games: int = int(stats.get("games", 0))
+	var tiles: Array = [["总场次", str(games)], ["胜场", str(int(stats.get("wins", 0)))], ["胜率", "%d%%" % (int(stats.get("wins", 0)) * 100 / games) if games > 0 else "—"],
+		["抓到", str(int(stats.get("captures", 0)))], ["救出", str(int(stats.get("rescues", 0)))], ["修发电机", str(int(stats.get("repairs", 0)))], ["MVP", str(int(stats.get("mvp", 0)))]]
+	for i: int in tiles.size():
+		var tile: Panel = _panel(Vector2(60 + i * 174, 110), Vector2(162, 110), "panel/panel_room_code_cell")
+		tile.add_child(_title_label(str(tiles[i][1]), Vector2(0, 14), Vector2(162, 52), 38, UiAssets.COLOR_GOLD, true))
+		tile.add_child(_label(str(tiles[i][0]), Vector2(0, 66), Vector2(162, 28), FS_SMALL, UiAssets.COLOR_TEXT, true))
+		_add(tile)
+	var panel: Panel = _panel(Vector2(60, 240), Vector2(1214, 470))
+	_add(panel)
+	_section_title(panel, "最近对局", "icon/record-icon")
+	var records: Array = records_cache.get("records", [])
+	if records.is_empty():
+		panel.add_child(_label("还没有对局记录，去打一局吧", Vector2(0, 200), Vector2(1214, 40), FS_BODY, UiAssets.COLOR_MUTED, true))
+		return
+	for i: int in mini(records.size(), 6):
+		var r: Dictionary = records[i]
+		var row: Panel = _panel(Vector2(30, 70 + i * 64), Vector2(1154, 58), "panel/panel_list_row")
+		var won: bool = bool(r.get("win", false))
+		row.add_child(_title_label("胜" if won else "负", Vector2(16, 0), Vector2(50, 58), 30, UiAssets.COLOR_GOLD if won else Color("8f8aa8"), true))
+		row.add_child(_label(str(MAP_INFO.get(str(r.get("mapId", "old_dorm")), MAP_INFO.old_dorm).name), Vector2(80, 0), Vector2(160, 58), FS_BODY, UiAssets.COLOR_TEXT))
+		row.add_child(_label(str(ROLE_INFO.get(str(r.get("role", "hider")), ROLE_INFO.hider).name), Vector2(250, 0), Vector2(90, 58), FS_BODY, ROLE_INFO.get(str(r.get("role", "hider")), ROLE_INFO.hider).color))
+		var detail: String = "抓 %d 人" % int(r.get("captures", 0)) if r.get("role") == "hunter" else "修 %d · 救 %d%s" % [int(r.get("repairs", 0)), int(r.get("rescues", 0)), " · 存活" if r.get("survived", false) else ""]
+		row.add_child(_label(detail, Vector2(350, 0), Vector2(320, 58), FS_SMALL, UiAssets.COLOR_MUTED))
+		row.add_child(_label("%d 分%s" % [int(r.get("score", 0)), "  MVP" if r.get("mvp", false) else ""], Vector2(680, 0), Vector2(200, 58), FS_BODY, UiAssets.COLOR_GOLD))
+		var minutes: int = int((Time.get_unix_time_from_system() * 1000.0 - float(r.get("at", 0))) / 60000.0)
+		var ago: String = "刚刚" if minutes < 1 else ("%d 分钟前" % minutes if minutes < 60 else ("%d 小时前" % (minutes / 60) if minutes < 1440 else "%d 天前" % (minutes / 1440)))
+		var when: Label = _label(ago, Vector2(900, 0), Vector2(230, 58), FS_SMALL, UiAssets.COLOR_MUTED)
+		when.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(when)
+		panel.add_child(row)
+
+# ---------------------------------------------------------------- 23 每日任务
+
+func _build_tasks() -> void:
+	_header("每日任务", 6)
+	_add(_label("每天 0 点（北京时间）刷新", Vector2(900, 40), Vector2(380, 30), FS_SMALL, UiAssets.COLOR_MUTED))
+	if tasks_cache.is_empty():
+		_add(_label("正在加载…", Vector2(0, 360), Vector2(1334, 40), FS_BODY, UiAssets.COLOR_MUTED, true))
+		var response: Dictionary = await Api.get_json("/tasks")
+		if response.get("ok", false) and Router.current == 23:
+			tasks_cache = response
+			show_page(23)
+		return
+	var tasks: Array = tasks_cache.get("tasks", [])
+	for i: int in tasks.size():
+		var t: Dictionary = tasks[i]
+		var row: Panel = _panel(Vector2(120, 110 + i * 96), Vector2(1094, 86), "panel/panel_list_row")
+		var goal: int = int(t.get("goal", 1))
+		var progress: int = int(t.get("progress", 0))
+		row.add_child(_label(str(t.get("name", "")), Vector2(30, 6), Vector2(420, 40), 22, UiAssets.COLOR_TEXT))
+		row.add_child(_progress(Vector2(30, 50), Vector2(360, 22), float(progress) / goal))
+		row.add_child(_label("%d / %d" % [progress, goal], Vector2(400, 44), Vector2(100, 32), FS_SMALL, UiAssets.COLOR_MUTED))
+		var reward: Dictionary = t.get("reward", {})
+		var rx: float = 560.0
+		for kind: Array in [["coins", "icon/coin-icon"], ["gems", "icon/gem-icon"], ["exp", "icon/star-icon"]]:
+			if int(reward.get(kind[0], 0)) > 0:
+				row.add_child(UiAssets.picture(str(kind[1]), Vector2(rx, 24), Vector2(36, 36)))
+				row.add_child(_label("+%d" % int(reward.get(kind[0], 0)), Vector2(rx + 40, 0), Vector2(80, 86), FS_BODY, UiAssets.COLOR_GOLD))
+				rx += 130
+		var done: bool = progress >= goal
+		var claimed: bool = bool(t.get("claimed", false))
+		var claim: Button = _button("已领取" if claimed else ("领取" if done else "未完成"), Vector2(900, 14), Vector2(168, 58), UiAssets.COLOR_GOLD if done and not claimed else Color("38345e"), 22)
+		claim.disabled = claimed or not done
+		var id: String = str(t.get("id", ""))
+		claim.pressed.connect(func() -> void:
+			var response: Dictionary = await Api.request("/tasks/claim", {"id": id})
+			if response.get("ok", false):
+				Session.user = response.user
+				tasks_cache = {"tasks": response.tasks}
+				show_toast("奖励已领取")
+				show_page(23)
+			else:
+				show_toast(str(response.get("msg", "领取失败"))))
+		row.add_child(claim)
+		_add(row)
 
 # ---------------------------------------------------------------- widgets
 
@@ -1290,16 +1638,10 @@ func _resource_chip(icon: String, text: String, pos: Vector2, size: Vector2 = Ve
 	chip.add_child(_label(text, Vector2(56, 0), Vector2(size.x - 66, size.y), 22, UiAssets.COLOR_TEXT, true))
 	return chip
 
-## Full-body hider (white pyjama art tinted with the player colour) at `height` px tall.
-func _sprite_figure(color: String, pos: Vector2, height: float) -> TextureRect:
-	# The 128x192 sprite is drawn at a whole-number scale so every art pixel stays square.
-	var px_scale: float = maxf(1.0, roundf(height / 192.0))
-	var box: Vector2 = Vector2(128, 192) * px_scale
-	pos += (Vector2(height * 0.75, height) - box) * Vector2(0.5, 1.0)
-	var figure: TextureRect = UiAssets.picture("sprite/sprite-hider", pos, box, UiAssets.player_color(color).lightened(0.25))
-	# Pixel art: scale with nearest filtering so the enlarged figure stays crisp.
-	figure.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	return figure
+## Full-body standing hider (T6 idle frame, pajama-only tint, equipped hat) at `height` px tall.
+func _sprite_figure(color: String, pos: Vector2, height: float) -> Control:
+	var look: Dictionary = Session.user.get("look", {}) if Session.user.get("look") is Dictionary else {}
+	return CharacterArt.figure(color, str(look.get("hat", "nightcap")), pos, height)
 
 ## Warm elliptical spotlight on the floor under a standing figure (05 / 06).
 func _floor_glow(center: Vector2, size: Vector2) -> TextureRect:
@@ -1385,8 +1727,10 @@ func save_debug_shot(name: String) -> void:
 	get_tree().quit(0 if error == OK else 1)
 
 func prepare_debug_shot(name: String) -> void:
-	var page: int = int(name)
-	Session.user = {"id":"demo", "shortId":"10238471", "nickname":"小夜猫", "level":8, "exp":62, "color":"blue", "coins":1280, "gems":60, "bindings":{"wechat":true, "phone":null}}
+	# "13" or "13-night_mall": page number, optionally the map to load for in-match pages.
+	var page: int = int(name.get_slice("-", 0))
+	var map_id: String = name.get_slice("-", 1) if "-" in name else "old_dorm"
+	Session.user = {"id":"demo", "shortId":"10238471", "nickname":"小夜猫", "level":8, "exp":62, "color":"blue", "coins":1280, "gems":60, "look":{"hat":"cat", "footprint":"paw", "effect":"sparkle"}, "bindings":{"wechat":true, "phone":null}}
 	Session.consent = true
 	var players: Array[Dictionary] = []
 	for i: int in 8:
@@ -1401,9 +1745,10 @@ func prepare_debug_shot(name: String) -> void:
 	Session.game = {"you":{"id":"demo", "role":"hunter" if page == 14 else "hider"}}
 	if page in [13, 14, 16]:
 		# The real 旧宿舍楼 map (exported from the server's wireMap) so shots show furniture and decor.
-		var map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/old_dorm_map.json"))
-		Session.game = {"mapId":"old_dorm", "you":{"id":"demo", "role":"hunter" if page == 14 else "hider"}, "players":[{"id":"demo", "color":"blue", "nickname":"小夜猫"}], "map":map}
-		var at: Vector2 = Vector2(31.5, 21.0) if page == 14 else Vector2(12.5, 6.2)
+		var map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/%s_map.json" % map_id))
+		Session.game = {"mapId":map_id, "you":{"id":"demo", "role":"hunter" if page == 14 else "hider"}, "players":[{"id":"demo", "color":"blue", "nickname":"小夜猫"}], "map":map}
+		var spawns: Array = map.get("hiderSpawns", [])
+		var at: Vector2 = Vector2(float(map.hunterSpawn.x), float(map.hunterSpawn.y)) if page == 14 else (Vector2(12.5, 6.2) if map_id == "old_dorm" else Vector2(float(spawns[0].x), float(spawns[0].y)))
 		var roster: Array = []
 		for i: int in 9:
 			roster.append({"color":UiAssets.HIDER_COLORS[(i + 5) % 8], "caught":i >= 7})
@@ -1415,6 +1760,24 @@ func prepare_debug_shot(name: String) -> void:
 		Session.phase_ends = Net.now_ms() + (28000.0 if page == 16 else 402000.0)
 		if page == 16:
 			Session.event = {"kind":"blackout", "stage":"warn", "at":Net.now_ms() + 5000}
+	if page in [20, 21]:
+		var items: Array = []
+		var catalog: Array = [["hat","nightcap","蓝色睡帽",0,"coins"],["hat","cat","猫耳帽",800,"coins"],["hat","bear","小熊帽",800,"coins"],["hat","dino","恐龙帽",1200,"coins"],["hat","bunny","兔耳帽",1200,"coins"],["hat","fox","狐狸帽",1500,"coins"],["hat","pumpkin","南瓜帽",60,"gems"],["hat","crown","小皇冠",200,"gems"],
+			["footprint","plain","普通脚印",0,"coins"],["footprint","paw","猫爪脚印",600,"coins"],["footprint","star","星星脚印",900,"coins"],["effect","poof","烟雾变身",0,"coins"],["effect","sparkle","星光变身",1000,"coins"]]
+		for c: Array in catalog:
+			items.append({"slot":c[0],"id":c[1],"name":c[2],"price":c[3],"currency":c[4],"owned":c[3] == 0 or c[1] in ["cat","paw","sparkle"],"rare":c[1] == "crown"})
+		shop_cache = {"ok":true,"items":items}
+	if page == 22:
+		var now: float = Time.get_unix_time_from_system() * 1000.0
+		records_cache = {"stats":{"games":23,"wins":13,"captures":9,"rescues":7,"repairs":18,"mvp":4},"records":[
+			{"mapId":"night_hospital","role":"hider","win":true,"score":390,"captures":0,"repairs":2,"rescues":1,"survived":true,"mvp":true,"at":now-600000},
+			{"mapId":"old_dorm","role":"hunter","win":false,"score":210,"captures":3,"at":now-3600000},
+			{"mapId":"snow_lodge","role":"hider","win":false,"score":120,"repairs":1,"rescues":0,"at":now-7200000},
+			{"mapId":"midnight_cruise","role":"hider","win":true,"score":330,"repairs":1,"rescues":2,"survived":true,"at":now-90000000}]}
+	if page == 23:
+		tasks_cache = {"tasks":[{"id":"play","name":"完成 3 局对局","goal":3,"progress":3,"reward":{"coins":100},"claimed":false},{"id":"win","name":"赢下 1 局","goal":1,"progress":1,"reward":{"coins":80,"exp":30},"claimed":true},
+			{"id":"repair","name":"修好 2 台发电机","goal":2,"progress":1,"reward":{"coins":60},"claimed":false},{"id":"rescue","name":"救出 1 名队友","goal":1,"progress":0,"reward":{"coins":60},"claimed":false},
+			{"id":"catch","name":"作为猎手抓到 3 人","goal":3,"progress":2,"reward":{"coins":80},"claimed":false},{"id":"survive","name":"作为藏者存活到结束","goal":1,"progress":0,"reward":{"gems":5},"claimed":false}]}
 	if page == 17:
 		Session.result = {"winner":"hider","players":[{"id":"demo","nickname":"小夜猫","color":"blue","role":"hider","score":390,"caught":false,"breakdown":[{"label":"存活到结束","pts":100},{"label":"存活分钟","pts":150},{"label":"修理发电机","pts":80},{"label":"解救队友","pts":60}]},{"id":"hunter","nickname":"夜巡者","role":"hunter","score":250,"caught":false}],"mvp":{"hider":"demo","hunter":"hunter"},"rewards":{"exp":200,"coins":120,"rankDelta":18}}
 	show_page(page)
